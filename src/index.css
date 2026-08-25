@@ -1,67 +1,61 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-primary-50: #fdfcf7;
-  --color-primary-100: #f9f5e8;
-  --color-primary-200: #f2e9cf;
-  --color-primary-300: #e7d5a5;
-  --color-primary-400: #d6b872;
-  --color-primary-500: #c29944; /* Warm Golden Amber */
-  --color-primary-600: #a77e31;
-  --color-primary-700: #846124;
-  --color-primary-800: #62471b;
-  --color-primary-900: #443011;
+  --color-accent-50: #fef2f2;
+  --color-accent-100: #fee2e2;
+  --color-accent-200: #fecaca;
+  --color-accent-300: #fca5a5;
+  --color-accent-400: #f87171;
+  --color-accent-500: #e52521;
+  --color-accent-600: #c91d19;
+  --color-accent-700: #b01714;
+  --color-accent-800: #991b1b;
+  --color-accent-900: #7f1d1d;
 
-  --color-accent-50: #fcfbfa;
-  --color-accent-100: #f6eedc;
-  --color-accent-200: #ebd8bd;
-  --color-accent-300: #dcbfa2;
-  --color-accent-400: #c69b82; /* Warm Earth Terracotta */
-  --color-accent-500: #af7762;
-  --color-accent-600: #935a47;
-  --color-accent-700: #744233;
-  --color-accent-800: #552d23;
-  --color-accent-900: #3a1e17;
+  --color-primary-50: #f8fafc;
+  --color-primary-100: #f1f5f9;
+  --color-primary-200: #e2e8f0;
+  --color-primary-300: #cbd5e1;
+  --color-primary-400: #94a3b8;
+  --color-primary-500: #0f172a;
+  --color-primary-600: #1e293b;
+  --color-primary-700: #334155;
+  --color-primary-800: #475569;
+  --color-primary-900: #64748b;
 
-  --color-sage-50: #f7faf8;
-  --color-sage-100: #eef3f0;
-  --color-sage-200: #d5e3da;
-  --color-sage-300: #b5cdc0;
-  --color-sage-400: #8faea1; /* Sage Green */
-  --color-sage-500: #6f8f82;
-  --color-sage-600: #547165;
-  --color-sage-700: #425950;
-  --color-sage-800: #32433c;
-  --color-sage-900: #222d29;
+  --color-sage-50: #ecfdf5;
+  --color-sage-100: #d1fae5;
+  --color-sage-200: #a7f3d0;
+  --color-sage-300: #6ee7b7;
+  --color-sage-400: #34d399;
+  --color-sage-500: #059669;
+  --color-sage-600: #047857;
+  --color-sage-700: #065f46;
+  --color-sage-800: #064e3b;
+  --color-sage-900: #022c22;
 
-  --color-cream-50: #fafaf6;
-  --color-cream-100: #f5f5ee;
-  --color-cream-200: #ebebe0;
-  --color-cream-300: #d7d7c1;
-  --color-cream-400: #bebe9a;
-  --color-cream-500: #a2a275;
-  --color-cream-600: #828258;
-  --color-cream-700: #656543;
-  --color-cream-800: #48482f;
-  --color-cream-900: #2f2f1f;
+  --color-brand-red: #e52521;
+  --color-brand-dark: #0f172a;
+  --color-brand-navy: #1e293b;
+  --color-brand-amber: #f59e0b;
 
-  --font-display: 'Outfit', 'Inter', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
 }
 
 /* Custom Base Styles */
 @layer base {
   body {
     font-family: var(--font-body);
-    background-color: var(--color-primary-50);
-    color: #4b3e34; /* Warm Dark Brown instead of cold black */
+    background-color: #f8fafc;
+    color: #0f172a;
     -webkit-font-smoothing: antialiased;
   }
   
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
-    color: #382d24;
+    color: #0f172a;
   }
 }
 

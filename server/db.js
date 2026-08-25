@@ -135,7 +135,8 @@ export const initDB = () => {
         // Migration: add orden to productos
         try {
           await dbRun(`ALTER TABLE productos ADD COLUMN orden INTEGER DEFAULT 0`);
-          // Initialize orden from current id order
+        } catch (_) {}
+        try {
           await dbRun(`UPDATE productos SET orden = id WHERE orden = 0 OR orden IS NULL`);
         } catch (_) {}
 

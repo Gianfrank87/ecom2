@@ -56,7 +56,8 @@ const mapProduct = (p) => ({
   category: p.categoria,
   image: p.imagen_url,
   featured: Boolean(p.destacado),
-  activo: Boolean(p.activo)
+  activo: Boolean(p.activo),
+  orden: p.orden !== undefined && p.orden !== null ? Number(p.orden) : Number(p.id)
 });
 
 const mapOffer = async (o) => {
@@ -192,7 +193,7 @@ app.get('/api/clients/verify', requireClient, (req, res) => {
 // GET /api/products
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await dbAll('SELECT * FROM productos WHERE activo = 1');
+    const products = await dbAll('SELECT * FROM productos WHERE activo = 1 ORDER BY orden ASC, id ASC');
     res.json(products.map(mapProduct));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -217,12 +218,31 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     if (!name || !price || !category) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precio, categoría)' });
     }
+    const maxOrdenRow = await dbGet('SELECT COALESCE(MAX(orden), 0) as maxOrden FROM productos');
+    const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
-      `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-      [name, description, Number(price), Number(stock) || 0, category, image, featured ? 1 : 0]
+      `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo, orden)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      [name, description, Number(price), Number(stock) || 0, category, image, featured ? 1 : 0, nextOrden]
     );
     res.status(201).json({ id: String(result.lastID), message: 'Producto creado exitosamente' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/products/reorder (protected admin)
+app.patch('/api/products/reorder', requireAdmin, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Se requiere una lista de IDs para reordenar' });
+    }
+    for (let index = 0; index < ids.length; index++) {
+      const id = ids[index];
+      await dbRun('UPDATE productos SET orden = ? WHERE id = ?', [index + 1, id]);
+    }
+    res.json({ message: 'Orden actualizado exitosamente' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

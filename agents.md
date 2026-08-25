@@ -28,7 +28,7 @@
 ## 🗄️ Estructura de la Base de Datos (SQLite / MySQL Compatible)
 
 1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
-2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`
+2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
 3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `fecha_registro`
 4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `enviado` | `completado`)
 5. **`pedido_items`**: `id` (PK AUTO), `pedido_id`, `producto_id`, `oferta_id` (nullable), `cantidad`, `precio_unitario`
@@ -59,10 +59,11 @@
 - `GET /api/clients/orders` -> **Protegido Cliente** -> Retorna pedidos del cliente autenticado con sus items
 
 ### Productos
-- `GET /api/products` -> Público (retorna productos activos mapeados a camelCase)
+- `GET /api/products` -> Público (retorna productos activos ordenados por `orden ASC`)
 - `GET /api/products/:id` -> Público
 - `POST /api/products` -> **Protegido Admin**
 - `PUT /api/products/:id` -> **Protegido Admin**
+- `PATCH /api/products/reorder` -> **Protegido Admin** (recibe `{ ids: [...] }` para reordenar la posición `orden` de los productos)
 - `DELETE /api/products/:id` -> **Protegido Admin**
 
 ### Categorías
@@ -83,6 +84,22 @@
 
 ---
 
+## 🎨 Sistema de Diseño y Dirección Visual (E-Commerce Pet Shop Real)
+
+- **Tipografía Principal**: `Plus Jakarta Sans` (Google Fonts, pesos 300 a 800) en sustitución de Inter/system-ui.
+- **Paleta de Colores Corporativa**:
+  - **Rojo E-Commerce Principal (CTA & Acentos)**: `#e52521` (Hover: `#c91d19`, Active: `#b01714`)
+  - **Navy / Slate Oscuro (Headers & Barra de Beneficios)**: `#0f172a` y `#1e293b`
+  - **Fondo de Página**: `#f8fafc` (Gris neutro ultra limpio sin sombras ni gradientes turbios)
+  - **Dorado / Amber Promocional**: `#f59e0b` y `#fbbf24`
+  - **Verde Beneficios / Stock**: `#10b981` y `#84cc16`
+- **Estilo Visual**:
+  - Estructuras limpias y estructuradas con bordes de 1px (`border-gray-200`) y acentos de alto contraste en estado hover.
+  - Eliminación total de esquinas curvas exageraas tipo "SaaS genérico" y gradientes violetas.
+  - Fotografía real de producto en marcos blancos cuadrados con padding (`object-contain`).
+
+---
+
 ## 🎨 Componentes y Páginas del Frontend (`src/`)
 
 - **`src/services/api.js`**: Cliente `fetch` centralizado con inyección automática de headers de auth.
@@ -90,24 +107,21 @@
 - **`src/context/ClientAuthContext.jsx`**: Manejo global del estado de sesión de clientes (JWT).
 - **`src/context/CartContext.jsx`**: Carrito de compras, cantidades y tostadas de notificación.
 - **`src/components/`**:
-  - `Navbar.jsx`: Header responsivo con badge del carrito, acceso admin, y menú desplegable de usuario ("Mis Pedidos" + "Cerrar Sesión") responsive.
-  - `Hero.jsx`: Banner principal con estética cálida pastel/tierra.
-  - `FeaturedCategories.jsx`: Grid de categorías con enlaces al catálogo.
-  - `ProductCard.jsx`: Card de producto con botón de agregado rápido y badge sin stock.
-  - `OfertaCard.jsx`: Card de oferta (badge `🔥 OFERTA`, lista de productos del pack, cálculo de descuento, agrega la oferta como item único `isOffer` al carrito).
-  - `Footer.jsx`: Pie de página informativo.
+  - `Navbar.jsx`: Barra superior de beneficios (Envíos Gratis, 10% OFF Transferencia, Opiniones 4.9/5, Entrega 24/48hs estilo MisPichos) + Buscador centralizado (estilo MiVetShop) + Carrito con badge flotante.
+  - `Hero.jsx`: Banner promocional de alto impacto con código de cupón de descuento destacado (`HUELLITAS10`) + Banner inferior de regalo de $10.000 (estilo MiVetShop).
+  - `FeaturedCategories.jsx`: Grilla de tarjetas blancas circulares limpias con iconos y contador.
+  - `ProductCard.jsx`: Card retail con acento superior rojo, fotografía contenida, badges de variantes/peso (`1.5kg`, `3kg`, `7.5kg`), precio destacado y botón CTA rojo sólido "Comprar Ahora".
+  - `OfertaCard.jsx`: Card de pack en oferta con badges de % OFF, ahorro destacado y botón de compra rápido.
+  - `Footer.jsx`: Pie de página profesional con medios de pago aceptados (VISA, Mastercard, Mercado Pago, Transferencia), datos de contacto y derechos reservados.
 - **`src/pages/`**:
-  - `Home.jsx`: Muestra Hero, Categorías, Sección "Ofertas del Momento" (si hay activas) y "Productos Destacados".
-  - `Catalog.jsx`: Muestra banner de Ofertas Activas, buscador en tiempo real, filtro por categoría y ordenamiento por precio/nombre.
+  - `Home.jsx`: Muestra Barra de Beneficios, Hero Promocional, Categorías, Grilla de Marcas Destacadas ("Seleccioná tu marca"), Sección de Ofertas y Productos Destacados en orden de prioridad.
+  - `Catalog.jsx`: Banner de Ofertas, filtro de búsqueda integrado con la URL (`?search=...`), filtros por categoría estilo botones pills y selector de ordenamiento por defecto en base al campo `orden`.
   - `ProductDetail.jsx`: Vista detallada de producto con selector de cantidad y stock.
   - `Cart.jsx`: Tabla de items del carrito, modificación de cantidades, subtotal/total y checkout real integrado con la API de pedidos.
-  - `ClientLogin.jsx`: Formulario de inicio de sesión para clientes (muestra mensajes de redireccionamiento del registro).
-  - `ClientRegister.jsx`: Formulario de registro con campo de confirmación de contraseña; redirige al login sin auto-login.
-  - `ClientOrders.jsx`: Vista `/mis-pedidos` con historial de pedidos del cliente: estado visual, fecha, productos con imágenes y totales colapsables.
-  - `Admin.jsx`: Login Admin + Dashboard con Tabs:
-    - **Productos**: CRUD completo, filtro por nivel de stock (todos/bajo/agotado) y ordenamiento (menor/mayor stock).
-    - **Ofertas**: CRUD, activar/desactivar, contador de unidades vendidas por oferta.
-    - **Ventas**: Lista de pedidos con selector de estado + badge animado en el tab para pedidos no leídos.
+  - `ClientLogin.jsx`: Formulario de inicio de sesión para clientes.
+  - `ClientRegister.jsx`: Formulario de registro con confirmación de contraseña.
+  - `ClientOrders.jsx`: Vista `/mis-pedidos` con historial de pedidos del cliente.
+  - `Admin.jsx`: Panel Admin con tabs de Productos (Drag & drop `@dnd-kit/core`), Ofertas y Ventas.
 
 ---
 
@@ -122,12 +136,20 @@
 8. ~~**Panel Admin - Ofertas vendidas**: Añadido contador de ofertas vendidas consultando a la base de datos la cantidad de compras realizadas de esa oferta.~~ (Completado)
 9. ~~**Perfil de cliente / Mis Pedidos**: Menú desplegable en el Navbar (desktop + mobile) con "Mis Pedidos" y "Cerrar Sesión". Vista `/mis-pedidos` con historial de pedidos, estado, productos e imágenes.~~ (Completado)
 10. ~~**Fix badge de notificaciones de Ventas**: Badge ahora muestra cantidad real de pedidos en estado `pendiente` (no por timestamp). Tab Ventas tiene subvistas "No resueltos" (pendientes, por defecto) y "Resueltos" (enviados/completados). Se eliminó la lógica de `localStorage`/timestamp.~~ (Completado)
+11. ~~**Ordenamiento manual de productos (Drag & Drop en Admin y Web Pública)**: Campo `orden` en tabla productos, endpoint `PATCH /api/products/reorder`, drag & drop en Admin con `@dnd-kit/core`, y catálogo/home mostrando productos por defecto en base a `orden` (ascendente).~~ (Completado)
+12. ~~**Rediseño de Frontend estilo Pet Shop Real**: Integración de referencias de e-commerce reales de Argentina (MiVetShop, MisPichos, Timberline). Barra de beneficios superior, buscador centralizado, Hero promocional con cupones destacados, grilla de marcas oficiales, tarjetas de productos con variantes y botones CTA rojos de alto contraste, y tipografía `Plus Jakarta Sans` en toda la web.~~ (Completado)
+
+13. ~~**BUG CRÍTICO - Contraste de botones**: Auditoria completa de todos los botones e interacciones. Se reemplazaron clases de Tailwind que dependían de variables `@theme` (`bg-accent-500`, `bg-primary-500`, `bg-sage-500`) por valores hexadecimales directos (`#e52521`, `#0f172a`, `#059669`) en `Admin.jsx`, `Cart.jsx` y `Navbar.jsx`. El login de admin, tabs de navegación, botones de formulario y acciones del carrito ahora tienen contraste WCAG AA garantizado.~~ (Completado)
+
+14. ~~**Buscador con autocompletado en Header**: `Navbar.jsx` precarga todos los productos al montar. Con debounce de 250ms filtra nombre, descripción y categoría. El desplegable muestra hasta 6 resultados con imagen, nombre, categoría y precio. Funciona en desktop (dropdown overlay) y mobile (lista dentro del drawer). Click en resultado navega directamente a `/product/:id`. Click fuera cierra el desplegable vía `ref` + `mousedown` listener.~~ (Completado)
+
+15. ~~**Modal flotante para edición de productos en Admin**: Eliminado el `window.scrollTo({ top: 0 })` del trigger de edición. Al hacer click en "Editar" en la tabla de productos, se abre un overlay `fixed inset-0` con backdrop semitransparente. El modal contiene el `ProductForm` precargado con los datos del producto. Se cierra con el botón X, con "Cancelar" o al guardar los cambios. El scroll de la página no se pierde.~~ (Completado)
 
 ---
 
 ## 🔜 Siguiente Bloque Grande: Sistema de Pagos
 
-A implementar en la próxima sesión con prompt dedicado:
+A implementar en la próxima sesión con prompt dedicated:
 
 - **Dos precios por producto/oferta**: precio con transferencia (con descuento) vs precio con QR/efectivo (precio completo). Requiere nuevos campos en `productos` y `ofertas`.
 - **Flujo transferencia**: mostrar alias bancario al cliente, permitir subir comprobante (imagen/PDF), pedido queda en estado `esperando_aprobacion`.

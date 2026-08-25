@@ -52,6 +52,16 @@ export const api = {
     return res.json();
   },
 
+  reorderProducts: async (ids) => {
+    const res = await fetch(`${API_URL}/products/reorder`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ ids })
+    });
+    if (!res.ok) throw new Error('Error al reordenar los productos');
+    return res.json();
+  },
+
   getCategories: async () => {
     const res = await fetch(`${API_URL}/categories`);
     if (!res.ok) throw new Error('Error al obtener categorías');
