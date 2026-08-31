@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --config client/vite.config.js",
-    "build": "vite --config client/vite.config.js build",
+    "dev": "cd client && vite",
+    "build": "cd client && vite build",
     "lint": "oxlint \"client/src/**/*.{js,jsx}\"",
-    "preview": "vite --config client/vite.config.js preview",
+    "preview": "cd client && vite preview",
     "dev:server": "node --env-file=.env server/index.js"
   },
   "dependencies": {

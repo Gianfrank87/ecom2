@@ -1,16 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { fileURLToPath } from 'node:url'
-
-const clientRoot = fileURLToPath(new URL('.', import.meta.url))
-const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 export default defineConfig({
-  root: clientRoot,
+  root: '.',
   plugins: [react(), tailwindcss()],
   build: {
-    outDir: `${projectRoot}/dist`,
+    outDir: 'dist',
     emptyOutDir: true,
   },
   server: {
