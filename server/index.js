@@ -9,8 +9,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-const JWT_SECRET = 'huellitas-client-secret-jwt-key-2024'; // For clients
+const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
 
 // Enable CORS and JSON parsing
 app.use(cors());
