@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
-import { AuthProvider } from './context/AuthContext';
 import { ClientAuthProvider } from './context/ClientAuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -16,8 +15,7 @@ import ClientOrders from './pages/ClientOrders';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ClientAuthProvider>
+    <ClientAuthProvider>
         <CartProvider>
           <Router>
             <div className="flex flex-col min-h-screen">
@@ -44,6 +42,5 @@ export default function App() {
         </Router>
         </CartProvider>
       </ClientAuthProvider>
-    </AuthProvider>
   );
 }

@@ -12,7 +12,7 @@
   - Tailwind CSS v4 (`@tailwindcss/vite` nativo)
   - React Router DOM v7
   - Lucide React (Iconos)
-  - `AuthContext` (Token Admin persistido en `localStorage`)
+  - `ClientAuthContext` (Sesión JWT única persistida en `localStorage`, con rol)
   - `CartContext` (Carrito persistido en `localStorage`)
 - **Backend**:
   - Node.js (ES Modules `"type": "module"`)
@@ -29,34 +29,36 @@
 
 1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
 2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
-3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `fecha_registro`
+3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `rol` (`cliente` | `admin`), `fecha_registro`
 4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `enviado` | `completado`)
 5. **`pedido_items`**: `id` (PK AUTO), `pedido_id`, `producto_id`, `oferta_id` (nullable), `cantidad`, `precio_unitario`
-6. **`ofertas`**: `id` (PK AUTO), `nombre`, `producto_ids` (JSON Array), `descuento_o_precio_paquete`, `tipo_descuento` (`'precio_paquete'` | `'porcentaje'`), `prioridad`, `activa`
+6. **`mensajes`**: `id` (PK AUTO), `pedido_id`, `remitente` (`cliente` | `admin`), `contenido`, `fecha`, `leido`, `hilo_id`, `tipo` (`mensaje` | `sistema`), `cerrado`
+7. **`ofertas`**: `id` (PK AUTO), `nombre`, `producto_ids` (JSON Array), `descuento_o_precio_paquete`, `tipo_descuento` (`'precio_paquete'` | `'porcentaje'`), `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`
 
 ---
 
-## 🔑 Credenciales y Autenticación Admin
+## 🔑 Credenciales y Autenticación
 
-- **Usuario Admin**: `Admin`
-- **Contraseña Admin**: `Admin`
-- **Token Admin Fijo (Dev)**: `huellitas-admin-secret-token-2024`
-- **Header para llamadas protegidas**: `Authorization: Bearer huellitas-admin-secret-token-2024`
-- **Llave LocalStorage Frontend**: `huellitas_admin_token`
+- **Login único**: clientes y administradores ingresan desde `/login` mediante `POST /api/clients/login`.
+- **Superusuario de pruebas**: usuario `Admin`, contraseña `Admin`, email interno `admin@huellitas.local`, `rol = admin`.
+- **Usuarios nuevos**: se crean con `rol = cliente` por defecto.
+- **Sesión frontend**: JWT persistido en `huellitas_client_token`; el campo `user.role` determina si se muestra el acceso al panel.
+- **Autorización admin**: los endpoints administrativos validan el JWT y requieren `role = admin`.
 
 ---
 
 ## 🌐 Endpoints de la API Backend (`http://localhost:5000/api`)
 
-### Autenticación Admin
-- `POST /api/admin/login` -> Body: `{ username, password }` -> Resp: `{ token, message }`
-- `GET /api/admin/verify` -> Protected -> Resp: `{ valid: true }`
-
 ### Autenticación Clientes
-- `POST /api/clients/register` -> Body: `{ name, email, password }` -> Resp: `{ token, user, message }`
-- `POST /api/clients/login` -> Body: `{ email, password }` -> Resp: `{ token, user, message }`
+- `POST /api/clients/register` -> Body: `{ name, email, password }` -> Resp: `{ token, user, message }`, crea rol `cliente`
+- `POST /api/clients/login` -> Body: `{ email, password }` (también acepta usuario admin) -> Resp: `{ token, user, message }` con `user.role`
 - `GET /api/clients/verify` -> **Protegido Cliente** -> Resp: `{ valid: true, user }`
 - `GET /api/clients/orders` -> **Protegido Cliente** -> Retorna pedidos del cliente autenticado con sus items
+- `GET /api/orders/:id/messages` -> **Protegido** -> Retorna el hilo si el usuario es dueño del pedido o admin
+- `POST /api/orders/:id/messages` -> **Protegido** -> Body: `{ contenido }`; registra remitente automáticamente como `cliente` o `admin`
+- `PATCH /api/orders/:id/messages/read` -> **Protegido** -> Body opcional: `{ remitente: 'cliente' | 'admin' }`; marca mensajes del hilo como leídos
+- `PATCH /api/orders/:id/messages/close` -> **Protegido Admin** -> Cierra el hilo activo e inserta un mensaje de sistema; el cliente puede abrir un hilo nuevo
+- `PATCH /api/orders/:id/messages/reopen` -> **Protegido Cliente** -> Crea un nuevo hilo abierto e inserta un mensaje de sistema con el nombre del cliente
 
 ### Productos
 - `GET /api/products` -> Público (retorna productos activos ordenados por `orden ASC`)
@@ -64,16 +66,17 @@
 - `POST /api/products` -> **Protegido Admin**
 - `PUT /api/products/:id` -> **Protegido Admin**
 - `PATCH /api/products/reorder` -> **Protegido Admin** (recibe `{ ids: [...] }` para reordenar la posición `orden` de los productos)
+- `PATCH /api/products/:id/stock` -> **Protegido Admin** (recibe `{ delta: 1 | -1 }`, ajusta una unidad y desactiva ofertas si el stock llega a cero)
 - `DELETE /api/products/:id` -> **Protegido Admin**
 
 ### Categorías
 - `GET /api/categories` -> Público
 
 ### Ofertas
-- `GET /api/offers/active` -> Público (retorna ofertas activas ordenadas por prioridad `DESC` con sus productos anidados y `vendidos`)
+- `GET /api/offers/active` -> Público (retorna ofertas activas ordenadas por prioridad `DESC` con sus productos anidados y `vendidos`; excluye ofertas con productos eliminados o sin stock)
 - `GET /api/offers` -> **Protegido Admin** (incluye campo `vendidos` por oferta)
 - `POST /api/offers` -> **Protegido Admin**
-- `PUT /api/offers/:id` -> **Protegido Admin**
+- `PUT /api/offers/:id` -> **Protegido Admin** (la UI muestra confirmación explícita si la oferta incluye productos sin stock)
 - `PATCH /api/offers/:id/toggle` -> **Protegido Admin** (activa/desactiva)
 - `DELETE /api/offers/:id` -> **Protegido Admin**
 
@@ -81,6 +84,7 @@
 - `POST /api/orders` -> **Protegido Cliente** -> Crea pedido, inserta `pedido_items` con `oferta_id` opcional y descuenta stock -> Resp: `{ orderId, message }`
 - `GET /api/orders` -> **Protegido Admin** -> Lista todos los pedidos con datos de cliente e items
 - `PATCH /api/orders/:id/status` -> **Protegido Admin** -> Cambia estado del pedido
+- `GET /api/messages` -> **Protegido Admin** -> Lista hilos agrupados por pedido con `no_leidos` para la bandeja del panel
 
 ---
 
@@ -103,8 +107,7 @@
 ## 🎨 Componentes y Páginas del Frontend (`src/`)
 
 - **`src/services/api.js`**: Cliente `fetch` centralizado con inyección automática de headers de auth.
-- **`src/context/AuthContext.jsx`**: Manejo global del estado admin y sesión.
-- **`src/context/ClientAuthContext.jsx`**: Manejo global del estado de sesión de clientes (JWT).
+- **`src/context/ClientAuthContext.jsx`**: Manejo global de la sesión única (JWT), usuario y `isAdmin`.
 - **`src/context/CartContext.jsx`**: Carrito de compras, cantidades y tostadas de notificación.
 - **`src/components/`**:
   - `Navbar.jsx`: Barra superior de beneficios (Envíos Gratis, 10% OFF Transferencia, Opiniones 4.9/5, Entrega 24/48hs estilo MisPichos) + Buscador centralizado (estilo MiVetShop) + Carrito con badge flotante.
@@ -120,8 +123,9 @@
   - `Cart.jsx`: Tabla de items del carrito, modificación de cantidades, subtotal/total y checkout real integrado con la API de pedidos.
   - `ClientLogin.jsx`: Formulario de inicio de sesión para clientes.
   - `ClientRegister.jsx`: Formulario de registro con confirmación de contraseña.
-  - `ClientOrders.jsx`: Vista `/mis-pedidos` con historial de pedidos del cliente.
-  - `Admin.jsx`: Panel Admin con tabs de Productos (Drag & drop `@dnd-kit/core`), Ofertas y Ventas.
+  - `ClientOrders.jsx`: Vista `/mis-pedidos` con historial de pedidos del cliente y botón para abrir un hilo de mensajes por pedido.
+  - `Admin.jsx`: Panel Admin con tabs de Productos (Drag & drop `@dnd-kit/core`), Ofertas, Ventas y Mensajes agrupados por pedido.
+  - `Navbar.jsx`: El menú de perfil admin ofrece accesos a Pendientes, Ventas y Mensajes con badge de no leídos; los clientes conservan Mis Pedidos.
 
 ---
 
@@ -144,6 +148,21 @@
 14. ~~**Buscador con autocompletado en Header**: `Navbar.jsx` precarga todos los productos al montar. Con debounce de 250ms filtra nombre, descripción y categoría. El desplegable muestra hasta 6 resultados con imagen, nombre, categoría y precio. Funciona en desktop (dropdown overlay) y mobile (lista dentro del drawer). Click en resultado navega directamente a `/product/:id`. Click fuera cierra el desplegable vía `ref` + `mousedown` listener.~~ (Completado)
 
 15. ~~**Modal flotante para edición de productos en Admin**: Eliminado el `window.scrollTo({ top: 0 })` del trigger de edición. Al hacer click en "Editar" en la tabla de productos, se abre un overlay `fixed inset-0` con backdrop semitransparente. El modal contiene el `ProductForm` precargado con los datos del producto. Se cierra con el botón X, con "Cancelar" o al guardar los cambios. El scroll de la página no se pierde.~~ (Completado)
+16. ~~**Login único con roles**: Se eliminó el login público separado de admin. `clientes` incorpora `rol`, el superusuario `Admin/Admin` se guarda como `admin`, el JWT incluye el rol y el middleware protege el panel y sus endpoints. El ícono de admin sólo se muestra a usuarios administradores.~~ (Completado)
+17. ~~**Sincronización de ofertas con stock**: Al eliminar un producto, al descontar stock por una venta o al llevarlo a cero desde Admin, las ofertas activas que lo contienen se desactivan sin borrarse y registran `Desactivada: producto sin stock` junto con el producto responsable. El endpoint público filtra ofertas incompletas o sin stock y la reactivación sólo ocurre mediante una acción manual del admin.~~ (Completado)
+18. ~~**Ajuste rápido de stock en Admin**: Se agregaron botones `+/-` en cada fila de productos y el endpoint `PATCH /api/products/:id/stock` para aplicar cambios inmediatos de una unidad, incluyendo la desactivación automática de ofertas y su notificación visible en la pestaña Ofertas.~~ (Completado)
+19. ~~**Fricción consciente para ofertas sin stock**: Al crear o editar una oferta con productos agotados, o reactivar una oferta desactivada automáticamente por falta de stock, el Admin debe confirmar explícitamente mediante un modal con las opciones "Cancelar" / "Activar igual" y el listado de productos afectados.~~ (Completado)
+20. ~~**Advertencia persistente de stock irregular**: Las ofertas activas forzadas por el Admin muestran en el listado de Ofertas el badge `Stock irregular` y los nombres exactos de los productos sin stock. Estas ofertas continúan excluidas de `GET /api/offers/active`, por lo que nunca se publican ni se pueden comprar desde el catálogo.~~ (Completado)
+21. ~~**Confirmación al reactivar ofertas con stock irregular**: El toggle de activación evalúa tanto `desactivada_por_stock` como el stock actual de todos los productos asociados. Si alguno está en `0`, muestra el modal con el listado de productos y las acciones `Cancelar` / `Activar igual`; las ofertas sin problemas se activan directamente.~~ (Completado)
+22. ~~**UX de checkboxes en Admin**: Los checkboxes de destacar productos, seleccionar productos de ofertas y activar ofertas ahora se pueden cambiar haciendo click en el recuadro, el texto o la fila completa de cada opción.~~ (Completado)
+23. ~~**Mensajes y reclamos por pedido**: Se agregó la tabla `mensajes` y endpoints protegidos para consultar, enviar y marcar mensajes como leídos. Los clientes pueden contactar desde `/mis-pedidos`; Admin tiene una pestaña de Mensajes agrupada por pedido, con respuestas y badge de no leídos. El menú de perfil admin reemplaza Mis Pedidos por accesos a Pendientes, Ventas y Mensajes.~~ (Completado)
+24. ~~**Validación transaccional de stock en checkout**: `POST /api/orders` valida dentro de una transacción `BEGIN IMMEDIATE` la cantidad total solicitada de cada producto, incluyendo componentes de ofertas, antes de crear el pedido o descontar stock. Si algún producto no alcanza, responde HTTP 409 con el nombre y stock disponible y ejecuta rollback. La compra excedida fue probada y no creó ningún pedido.~~ (Completado)
+25. ~~**UX de stock desactualizado en carrito**: Cuando el checkout recibe un rechazo por stock insuficiente, el cliente muestra el producto, las unidades disponibles y ajusta automáticamente la cantidad y el stock del item en el carrito para evitar repetir la compra inválida.~~ (Completado)
+26. ~~**UX de mensajería y notificaciones**: El hilo del Admin permanece abierto al responder y refresca la conversación; los perfiles muestran un badge con el conteo real de mensajes sin leer, que se actualiza al marcar el hilo como leído. En `Mis Pedidos`, el botón cambia de `Contactar sobre este pedido` a `Abrir chat` cuando ya existe conversación.~~ (Completado)
+27. ~~**Cierre y reapertura de reclamos**: El Admin puede cerrar el hilo; se agrega un mensaje de sistema visible al cliente, se bloquea la escritura del hilo cerrado y el cliente puede abrir un reclamo nuevo para el mismo pedido sin mezclar conversaciones.~~ (Completado)
+28. ~~**Reapertura real de reclamos**: La reapertura usa un endpoint propio que crea un nuevo `hilo_id`, agrega el mensaje de sistema `[cliente] reabrió el reclamo` y deja el hilo escribible. El Admin puede volver a cerrarlo definitivamente desde el mismo chat.~~ (Completado)
+29. ~~**Indicador de cierre en Mensajes**: Cada hilo cerrado muestra el badge `Cerrado` en gris en el listado del panel Admin, diferenciándolo de los reclamos abiertos.~~ (Completado)
+30. ~~**Notificaciones visibles de mensajes**: El contador real de mensajes sin leer se muestra como una burbuja roja superpuesta fuera del botón/avatar de perfil, tanto para admin como para cliente, y se actualiza al marcar conversaciones como leídas.~~ (Completado)
 
 ---
 

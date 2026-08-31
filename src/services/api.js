@@ -1,12 +1,12 @@
 const API_URL = 'http://localhost:5000/api';
 
-// Get stored admin token
-const getAdminToken = () => localStorage.getItem('huellitas_admin_token');
+// All protected requests use the single authenticated session token.
+const getSessionToken = () => localStorage.getItem('huellitas_client_token');
 
 // Helper: build auth headers
 const authHeaders = () => ({
   'Content-Type': 'application/json',
-  'Authorization': `Bearer ${getAdminToken()}`
+  'Authorization': `Bearer ${getSessionToken()}`
 });
 
 export const api = {
@@ -52,6 +52,19 @@ export const api = {
     return res.json();
   },
 
+  updateProductStock: async (id, delta) => {
+    const res = await fetch(`${API_URL}/products/${id}/stock`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ delta })
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Error al actualizar el stock');
+    }
+    return res.json();
+  },
+
   reorderProducts: async (ids) => {
     const res = await fetch(`${API_URL}/products/reorder`, {
       method: 'PATCH',
@@ -65,28 +78,6 @@ export const api = {
   getCategories: async () => {
     const res = await fetch(`${API_URL}/categories`);
     if (!res.ok) throw new Error('Error al obtener categorías');
-    return res.json();
-  },
-
-  // ─── Admin Auth ───
-  adminLogin: async (username, password) => {
-    const res = await fetch(`${API_URL}/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Credenciales incorrectas');
-    }
-    return res.json(); // { token, message }
-  },
-
-  verifyAdmin: async (token) => {
-    const res = await fetch(`${API_URL}/admin/verify`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('Token inválido');
     return res.json();
   },
 
@@ -206,7 +197,11 @@ export const api = {
     });
     if (!res.ok) {
       const data = await res.json();
-      throw new Error(data.error || 'Error al crear pedido');
+      const error = new Error(data.error || 'Error al crear pedido');
+      error.productId = data.productId;
+      error.available = data.available;
+      error.productName = data.productName;
+      throw error;
     }
     return res.json();
   },
@@ -219,6 +214,69 @@ export const api = {
       }
     });
     if (!res.ok) throw new Error('Error al obtener pedidos');
+    return res.json();
+  },
+
+  getOrderMessages: async (orderId) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/messages`, {
+      headers: authHeaders()
+    });
+    if (!res.ok) throw new Error('Error al obtener los mensajes');
+    return res.json();
+  },
+
+  sendOrderMessage: async (orderId, contenido, nuevoHilo = false) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/messages`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ contenido, nuevo_hilo: nuevoHilo })
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Error al enviar el mensaje');
+    }
+    return res.json();
+  },
+
+  markOrderMessagesRead: async (orderId, remitente) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/messages/read`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ remitente })
+    });
+    if (!res.ok) throw new Error('Error al marcar mensajes como leídos');
+    return res.json();
+  },
+
+  closeOrderMessages: async (orderId) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/messages/close`, {
+      method: 'PATCH',
+      headers: authHeaders()
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Error al cerrar el reclamo');
+    }
+    return res.json();
+  },
+
+  reopenOrderMessages: async (orderId) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/messages/reopen`, {
+      method: 'PATCH',
+      headers: authHeaders()
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Error al reabrir el reclamo');
+    }
+    return res.json();
+  },
+
+  getAdminMessages: async () => {
+    const res = await fetch(`${API_URL}/messages`, {
+      headers: authHeaders()
+    });
+    if (!res.ok) throw new Error('Error al obtener los mensajes');
     return res.json();
   }
 };

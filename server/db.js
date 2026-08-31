@@ -1,4 +1,5 @@
 import sqlite3 from 'sqlite3';
+import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -79,9 +80,15 @@ export const initDB = () => {
             nombre VARCHAR(255) NOT NULL,
             email VARCHAR(255) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
+            rol VARCHAR(20) NOT NULL DEFAULT 'cliente',
             fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         `);
+
+        // Migration: add role to existing client databases
+        try {
+          await dbRun(`ALTER TABLE clientes ADD COLUMN rol VARCHAR(20) NOT NULL DEFAULT 'cliente'`);
+        } catch (_) {}
 
         // 4. pedidos Table
         await dbRun(`
@@ -109,7 +116,33 @@ export const initDB = () => {
           )
         `);
 
-        // 6. ofertas Table
+        // 6. mensajes Table
+        await dbRun(`
+          CREATE TABLE IF NOT EXISTS mensajes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pedido_id INTEGER NOT NULL,
+            remitente VARCHAR(20) NOT NULL CHECK (remitente IN ('cliente', 'admin')),
+            contenido TEXT NOT NULL,
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            leido BOOLEAN DEFAULT 0,
+            hilo_id INTEGER NOT NULL DEFAULT 1,
+            tipo VARCHAR(20) NOT NULL DEFAULT 'mensaje',
+            cerrado BOOLEAN NOT NULL DEFAULT 0,
+            FOREIGN KEY (pedido_id) REFERENCES pedidos(id)
+          )
+        `);
+
+        try {
+          await dbRun(`ALTER TABLE mensajes ADD COLUMN hilo_id INTEGER NOT NULL DEFAULT 1`);
+        } catch (_) {}
+        try {
+          await dbRun(`ALTER TABLE mensajes ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'mensaje'`);
+        } catch (_) {}
+        try {
+          await dbRun(`ALTER TABLE mensajes ADD COLUMN cerrado BOOLEAN NOT NULL DEFAULT 0`);
+        } catch (_) {}
+
+        // 7. ofertas Table
         await dbRun(`
           CREATE TABLE IF NOT EXISTS ofertas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,13 +151,26 @@ export const initDB = () => {
             descuento_o_precio_paquete DECIMAL(10, 2) NOT NULL,
             tipo_descuento VARCHAR(50) DEFAULT 'precio_paquete',
             prioridad INTEGER DEFAULT 0,
-            activa BOOLEAN DEFAULT 1
+            activa BOOLEAN DEFAULT 1,
+            desactivada_por_stock BOOLEAN DEFAULT 0,
+            producto_sin_stock_id INTEGER,
+            producto_sin_stock_nombre VARCHAR(255)
           )
         `);
 
         // Migration: add tipo_descuento if it doesn't exist (for existing DBs)
         try {
           await dbRun(`ALTER TABLE ofertas ADD COLUMN tipo_descuento VARCHAR(50) DEFAULT 'precio_paquete'`);
+        } catch (_) {}
+
+        try {
+          await dbRun(`ALTER TABLE ofertas ADD COLUMN desactivada_por_stock BOOLEAN DEFAULT 0`);
+        } catch (_) {}
+        try {
+          await dbRun(`ALTER TABLE ofertas ADD COLUMN producto_sin_stock_id INTEGER`);
+        } catch (_) {}
+        try {
+          await dbRun(`ALTER TABLE ofertas ADD COLUMN producto_sin_stock_nombre VARCHAR(255)`);
         } catch (_) {}
 
         // Migration: add oferta_id to pedido_items
@@ -144,6 +190,21 @@ export const initDB = () => {
 
         // Seed data if empty
         await seedData();
+
+        const adminEmail = 'admin@huellitas.local';
+        const adminHash = await bcrypt.hash('Admin', 10);
+        const admin = await dbGet(
+          'SELECT id FROM clientes WHERE lower(nombre) = lower(?) OR lower(email) = lower(?)',
+          ['Admin', adminEmail]
+        );
+        if (admin) {
+          await dbRun('UPDATE clientes SET rol = ?, password_hash = ? WHERE id = ?', ['admin', adminHash, admin.id]);
+        } else {
+          await dbRun(
+            'INSERT INTO clientes (nombre, email, password_hash, rol) VALUES (?, ?, ?, ?)',
+            ['Admin', adminEmail, adminHash, 'admin']
+          );
+        }
 
         resolve();
       } catch (err) {

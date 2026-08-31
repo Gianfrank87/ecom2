@@ -6,7 +6,7 @@ import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
 
 export default function Cart() {
-  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal } = useCart();
+  const { cart, updateQuantity, updateItemStock, removeFromCart, clearCart, getCartTotal } = useCart();
   const { clientUser, clientToken } = useClientAuth();
   const navigate = useNavigate();
   
@@ -91,7 +91,12 @@ export default function Cart() {
         clearCart();
       }, 100);
     } catch (err) {
-      setApiError(err.message || 'Error al procesar el pago.');
+      if (err.productId !== undefined && err.available !== undefined) {
+        updateItemStock(String(err.productId), Number(err.available));
+        setApiError(`Solo quedan ${err.available} unidades de ${err.productName || 'este producto'}. Ajustamos el carrito para que puedas intentarlo de nuevo.`);
+      } else {
+        setApiError(err.message || 'Error al procesar el pago.');
+      }
     } finally {
       setCheckoutLoading(false);
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, GripVertical, X } from 'lucide-react';
+import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -16,7 +16,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useAuth } from '../context/AuthContext';
+import { Link, useLocation } from 'react-router-dom';
+import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
 
 // ─────────────── PRODUCT FORM ───────────────
@@ -118,11 +119,11 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
           className={inp(errors.image ? 'border-red-400' : 'border-gray-200')} />
         {errors.image && <p className="err">{errors.image}</p>}
       </div>
-      <div className="flex items-center gap-2">
+      <label htmlFor="featured" className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" id="featured" name="featured" checked={formData.featured} onChange={handleChange}
           className="w-4 h-4 rounded border-gray-300 text-[#e52521] cursor-pointer" />
-        <label htmlFor="featured" className="text-xs font-bold text-gray-700 uppercase tracking-wide cursor-pointer">Destacar en Home ⭐</label>
-      </div>
+        <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Destacar en Home ⭐</span>
+      </label>
       <div className="flex gap-2 pt-2">
         {editProduct && (
           <button type="button" onClick={onCancel}
@@ -140,7 +141,7 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
 }
 
 // ─────────────── OFFER FORM ───────────────
-function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback }) {
+function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback, onStockWarning }) {
   const EMPTY = { nombre: '', producto_ids: [], descuento_o_precio_paquete: '', tipo_descuento: 'precio_paquete', prioridad: 0, activa: true };
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
@@ -177,6 +178,16 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback }) {
       descuento_o_precio_paquete: Number(form.descuento_o_precio_paquete),
       prioridad: Number(form.prioridad)
     };
+    const unavailableProducts = products.filter(p => form.producto_ids.includes(p.id) && p.stock <= 0);
+    if (unavailableProducts.length > 0) {
+      onStockWarning({ products: unavailableProducts, onConfirm: () => saveOffer(payload) });
+      return;
+    }
+
+    await saveOffer(payload);
+  };
+
+  const saveOffer = async (payload) => {
     try {
       if (editOffer) {
         await api.updateOffer(editOffer.id, payload);
@@ -215,19 +226,18 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback }) {
         <div className="max-h-48 overflow-y-auto space-y-1.5 border border-gray-200 rounded-xl p-2 bg-gray-50">
           {products.map(p => {
             const selected = form.producto_ids.includes(p.id);
-            const disabled = p.stock <= 0;
             return (
-              <label key={p.id} onClick={() => !disabled && toggleProduct(p.id)}
+              <label key={p.id} htmlFor={`offer-product-${p.id}`}
                 className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer border transition-all ${
-                  selected ? 'border-[#e52521] bg-red-50/70 font-bold' : disabled ? 'border-gray-100 opacity-40 cursor-not-allowed' : 'border-gray-200 hover:border-gray-300'
+                  selected ? 'border-[#e52521] bg-red-50/70 font-bold' : 'border-gray-200 hover:border-gray-300'
                 }`}>
                 <div className="flex items-center gap-2 min-w-0">
-                  <input type="checkbox" checked={selected} disabled={disabled} onChange={() => {}}
+                  <input id={`offer-product-${p.id}`} type="checkbox" checked={selected} onChange={() => toggleProduct(p.id)}
                     className="w-3.5 h-3.5 rounded border-gray-300 text-[#e52521] cursor-pointer" />
                   <span className="truncate text-gray-800">{p.name}</span>
                 </div>
                 <span className="text-[10px] font-bold text-gray-900 shrink-0">
-                  ${p.price} {disabled && '(Sin stock)'}
+                  ${p.price} {p.stock <= 0 && '(Sin stock)'}
                 </span>
               </label>
             );
@@ -260,11 +270,11 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback }) {
           placeholder="0" className={inp('border-gray-200')} />
       </div>
 
-      <div className="flex items-center gap-2">
+      <label htmlFor="activa" className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" id="activa" checked={form.activa} onChange={e => setForm(f => ({...f, activa: e.target.checked}))}
           className="w-4 h-4 rounded border-gray-300 text-[#e52521] cursor-pointer" />
-        <label htmlFor="activa" className="text-xs font-bold text-gray-700 uppercase tracking-wide cursor-pointer">Oferta Activa</label>
-      </div>
+        <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Oferta Activa</span>
+      </label>
 
       <div className="flex gap-2 pt-2">
         {editOffer && (
@@ -283,7 +293,7 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback }) {
 }
 
 // ─────────────── SORTABLE ITEM COMPONENT ───────────────
-function SortableProductRow({ p, onEdit, onDelete, formatPrice, isDragDisabled }) {
+function SortableProductRow({ p, onEdit, onDelete, onStockChange, formatPrice, isDragDisabled }) {
   const {
     attributes,
     listeners,
@@ -333,11 +343,30 @@ function SortableProductRow({ p, onEdit, onDelete, formatPrice, isDragDisabled }
       <td className="py-3 px-2 text-xs text-gray-500 capitalize font-medium">{p.category}</td>
       <td className="py-3 px-2 font-extrabold text-xs text-gray-900">{formatPrice(p.price)}</td>
       <td className="py-3 px-2 text-xs">
-        {p.stock > 0 ? (
-          <span className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-black">{p.stock}</span>
-        ) : (
-          <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded font-black">Agotado</span>
-        )}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onStockChange(p, -1)}
+            disabled={p.stock <= 0}
+            className="w-6 h-6 inline-flex items-center justify-center rounded border border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            title="Restar una unidad"
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+          {p.stock > 0 ? (
+            <span className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-black min-w-[30px] text-center">{p.stock}</span>
+          ) : (
+            <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded font-black min-w-[30px] text-center">0</span>
+          )}
+          <button
+            type="button"
+            onClick={() => onStockChange(p, 1)}
+            className="w-6 h-6 inline-flex items-center justify-center rounded border border-gray-200 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+            title="Sumar una unidad"
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
       </td>
       <td className="py-3 px-2 text-right">
         <div className="flex gap-1.5 justify-end">
@@ -361,20 +390,102 @@ function SortableProductRow({ p, onEdit, onDelete, formatPrice, isDragDisabled }
   );
 }
 
+function AdminMessageThread({ thread, onClose, onSent }) {
+  const [messages, setMessages] = useState(thread.mensajes);
+  const [content, setContent] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [closed, setClosed] = useState(Boolean(thread.cerrado));
+
+  useEffect(() => {
+    api.markOrderMessagesRead(thread.pedido_id, 'cliente')
+      .then(() => window.dispatchEvent(new Event('messages-read')))
+      .catch(() => {});
+    api.getOrderMessages(thread.pedido_id).then(data => {
+      setMessages(data);
+      setClosed(Boolean(data.some(message => message.cerrado)));
+    }).catch(() => {});
+  }, [thread.pedido_id]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!content.trim() || sending) return;
+    setSending(true);
+    setError('');
+    try {
+      await api.sendOrderMessage(thread.pedido_id, content.trim());
+      setContent('');
+      const updatedMessages = await api.getOrderMessages(thread.pedido_id);
+      setMessages(updatedMessages);
+      onSent(updatedMessages);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleCloseThread = async () => {
+    try {
+      const result = await api.closeOrderMessages(thread.pedido_id);
+      const updatedMessages = [...messages, result.message];
+      setMessages(updatedMessages);
+      setClosed(true);
+      onSent(updatedMessages);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-lg rounded-2xl border border-gray-200 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div>
+            <h2 className="font-extrabold text-lg text-gray-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#e52521]" /> Pedido #{thread.pedido_id}</h2>
+            <p className="text-xs text-gray-400 mt-1">{thread.cliente_nombre} · {thread.cliente_email}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer" title="Cerrar"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-gray-50 min-h-[240px]">
+          {messages.map(message => message.tipo === 'sistema' ? (
+            <div key={message.id} className="text-center py-2"><span className="inline-block px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs italic">{message.contenido}</span></div>
+          ) : (
+            <div key={message.id} className={`flex ${message.remitente === 'admin' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[82%] rounded-2xl px-4 py-3 ${message.remitente === 'admin' ? 'bg-[#0f172a] text-white rounded-br-sm' : 'bg-white border border-gray-200 text-gray-700 rounded-bl-sm'}`}>
+                <p className="text-sm whitespace-pre-wrap break-words">{message.contenido}</p>
+                <p className={`text-[10px] mt-1 ${message.remitente === 'admin' ? 'text-white/70' : 'text-gray-400'}`}>{message.remitente === 'admin' ? 'Vos' : thread.cliente_nombre} · {new Date(message.fecha).toLocaleString('es-AR')}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {error && <p className="px-5 pt-3 text-xs font-bold text-red-600">{error}</p>}
+        {closed ? (
+          <div className="p-4 border-t border-gray-100 text-center text-xs font-bold text-gray-500">Este reclamo está cerrado.</div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-4 border-t border-gray-100 flex gap-2">
+            <textarea value={content} onChange={event => setContent(event.target.value)} placeholder="Escribí una respuesta..." rows="2" maxLength="2000" className="flex-1 resize-none px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-sm" />
+            <button type="submit" disabled={sending || !content.trim()} className="self-end p-3 rounded-xl bg-[#e52521] hover:bg-[#c91d19] disabled:opacity-40 text-white cursor-pointer disabled:cursor-not-allowed" title="Enviar respuesta" aria-label="Enviar respuesta"><Send className="w-4 h-4" /></button>
+            <button type="button" onClick={handleCloseThread} className="self-end px-3 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-xs font-bold cursor-pointer">Cerrar definitivamente</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
-  const { isAdmin, adminLogin, adminLogout, authLoading } = useAuth();
+  const { isAdmin, clientUser, clientLogout, authLoading } = useClientAuth();
+  const location = useLocation();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-
-  const [activeTab, setActiveTab] = useState('products');
+  const [activeTab, setActiveTab] = useState(new URLSearchParams(location.search).get('tab') || 'products');
   const [salesView, setSalesView] = useState('pending');
 
   const [products, setProducts] = useState([]);
   const [offers, setOffers] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [selectedMessageThread, setSelectedMessageThread] = useState(null);
   
   const [stockFilter, setStockFilter] = useState('all');
   const [stockSort, setStockSort] = useState('none');
@@ -385,6 +496,7 @@ export default function Admin() {
   const [isShakingOffer, setIsShakingOffer] = useState(false);
 
   const [feedback, setFeedback] = useState(null);
+  const [stockWarning, setStockWarning] = useState(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -432,28 +544,21 @@ export default function Admin() {
   const refreshProducts = () => api.getProducts().then(setProducts).catch(console.error);
   const refreshOffers = () => api.getAllOffers().then(setOffers).catch(console.error);
   const refreshOrders = () => api.getOrders().then(setOrders).catch(console.error);
+  const refreshMessages = () => api.getAdminMessages().then(setMessages).catch(console.error);
 
   useEffect(() => {
     if (isAdmin) {
       refreshProducts();
       refreshOffers();
       refreshOrders();
+      refreshMessages();
     }
   }, [isAdmin]);
 
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
-    try {
-      const data = await api.adminLogin(username, password);
-      adminLogin(data.token);
-    } catch (err) {
-      setLoginError(err.message);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(location.search).get('tab');
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [location.search]);
 
   const handleDeleteProduct = async (id) => {
     if (!window.confirm('¿Eliminar este producto?')) return;
@@ -461,16 +566,46 @@ export default function Admin() {
       await api.deleteProduct(id);
       showFeedback('Producto eliminado.', 'info');
       refreshProducts();
+      refreshOffers();
       if (editProduct?.id === id) setEditProduct(null);
     } catch (err) { showFeedback(err.message, 'error'); }
   };
 
-  const handleToggleOffer = async (id) => {
+  const handleStockChange = async (product, delta) => {
+    try {
+      const result = await api.updateProductStock(product.id, delta);
+      showFeedback(result.deactivatedOffers > 0
+        ? `${result.deactivatedOffers} oferta(s) desactivada(s) por falta de stock.`
+        : 'Stock actualizado.');
+      refreshProducts();
+      refreshOffers();
+    } catch (err) { showFeedback(err.message, 'error'); }
+  };
+
+  const completeToggleOffer = async (id) => {
     try {
       const result = await api.toggleOffer(id);
       showFeedback(`Oferta ${result.activa ? 'activada' : 'desactivada'}.`);
       refreshOffers();
     } catch (err) { showFeedback(err.message, 'error'); }
+  };
+
+  const handleToggleOffer = (offer) => {
+    const unavailableProducts = offer.products.filter(p => p.stock <= 0);
+    if (!offer.activa && (offer.desactivada_por_stock || unavailableProducts.length > 0)) {
+      setStockWarning({
+        products: unavailableProducts.length > 0
+          ? unavailableProducts
+          : [{ id: offer.producto_sin_stock_id, name: offer.producto_sin_stock_nombre || 'Producto sin stock', stock: 0 }],
+        onConfirm: () => completeToggleOffer(offer.id)
+      });
+      return;
+    }
+    completeToggleOffer(offer.id);
+  };
+
+  const handleOfferStockWarning = ({ products, onConfirm }) => {
+    setStockWarning({ products, onConfirm });
   };
 
   const handleDeleteOffer = async (id) => {
@@ -512,38 +647,24 @@ export default function Admin() {
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-extrabold text-xl text-gray-900">Panel de Control Admin</h1>
-              <p className="text-xs text-gray-400 font-semibold">Acceso exclusivo para administradores</p>
+              <h1 className="font-extrabold text-xl text-gray-900">Acceso restringido</h1>
+              <p className="text-xs text-gray-400 font-semibold">Esta sección es sólo para administradores.</p>
             </div>
           </div>
-
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1.5">Usuario</label>
-              <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Admin"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900" required />
-            </div>
-            <div>
-              <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1.5">Contraseña</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900" required />
-            </div>
-            {loginError && <p className="text-red-600 text-xs font-bold">⚠️ {loginError}</p>}
-            <button type="submit" disabled={loginLoading}
-              className="w-full py-3 rounded-xl bg-[#e52521] hover:bg-[#c91d19] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer disabled:opacity-60">
-              {loginLoading ? 'Verificando...' : 'Ingresar al Panel'}
-            </button>
-          </form>
-
-          <div className="pt-2 border-t border-gray-100 text-center">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Demo: Admin / Admin</span>
-          </div>
+          <p className="text-sm text-gray-600">{clientUser ? 'Tu cuenta no tiene permisos de administrador.' : 'Iniciá sesión con una cuenta administradora para continuar.'}</p>
+          {clientUser ? (
+            <button onClick={clientLogout} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs cursor-pointer">Cerrar sesión</button>
+          ) : (
+            <Link to="/login" className="block w-full py-3 rounded-xl bg-[#e52521] hover:bg-[#c91d19] text-white text-center font-black text-xs uppercase tracking-wider">Ir al login</Link>
+          )}
         </div>
       </div>
     );
   }
 
   const pendingOrdersCount = orders.filter(o => o.estado === 'pendiente').length;
+  const unreadMessagesCount = messages.reduce((total, thread) => total + thread.no_leidos, 0);
+  const stockDeactivatedOffers = offers.filter(o => o.desactivada_por_stock);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -554,6 +675,32 @@ export default function Admin() {
         }`}>
           {feedback.type === 'error' ? <XCircle className="w-5 h-5 text-red-600" /> : <CheckCircle className="w-5 h-5 text-emerald-600" />}
           {feedback.message}
+        </div>
+      )}
+
+      {stockWarning && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl border border-amber-200 shadow-2xl p-6 text-left">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-lg text-gray-900">Stock irregular</h2>
+                <p className="text-sm text-gray-700 mt-2">Este producto no tiene stock disponible. ¿Estás seguro que querés activar la oferta de todos modos?</p>
+                <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mt-4">Productos sin stock</p>
+                <ul className="mt-2 space-y-1">
+                  {stockWarning.products.map(product => (
+                    <li key={product.id} className="text-sm font-bold text-red-700">{product.name}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button type="button" onClick={() => setStockWarning(null)} className="px-4 py-2.5 rounded-xl border border-gray-300 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold cursor-pointer">Cancelar</button>
+              <button type="button" onClick={() => { const confirm = stockWarning.onConfirm; setStockWarning(null); confirm(); }} className="px-4 py-2.5 rounded-xl bg-[#e52521] hover:bg-[#c91d19] text-white text-xs font-black cursor-pointer">Activar igual</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -597,7 +744,7 @@ export default function Admin() {
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Panel Admin</h1>
           <p className="text-gray-500 text-xs font-semibold mt-0.5">Gestioná productos, ofertas y ventas de la tienda.</p>
         </div>
-        <button onClick={adminLogout}
+        <button onClick={clientLogout}
           className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:text-red-600 bg-white border border-gray-300 rounded-xl transition-all cursor-pointer hover:border-red-300">
           <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
         </button>
@@ -620,6 +767,11 @@ export default function Admin() {
               {offers.filter(o => o.activa).length}
             </span>
           )}
+          {stockDeactivatedOffers.length > 0 && (
+            <span className="w-5 h-5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black flex items-center justify-center">
+              {stockDeactivatedOffers.length}
+            </span>
+          )}
         </button>
         <button onClick={() => handleTabChange('sales')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
@@ -629,6 +781,17 @@ export default function Admin() {
           {pendingOrdersCount > 0 && (
             <span className="w-5 h-5 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center animate-pulse">
               {pendingOrdersCount}
+            </span>
+          )}
+        </button>
+        <button onClick={() => handleTabChange('messages')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
+            activeTab === 'messages' ? 'bg-[#e52521] text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100 font-bold'
+          }`}>
+          <MessageCircle className="w-4 h-4" /> Mensajes
+          {unreadMessagesCount > 0 && (
+            <span className="w-5 h-5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black flex items-center justify-center">
+              {unreadMessagesCount}
             </span>
           )}
         </button>
@@ -730,6 +893,7 @@ export default function Admin() {
                             p={p}
                             onEdit={triggerEditProduct}
                             onDelete={handleDeleteProduct}
+                            onStockChange={handleStockChange}
                             formatPrice={formatPrice}
                             isDragDisabled={isDragDisabled}
                           />
@@ -770,10 +934,27 @@ export default function Admin() {
               onSaved={() => { refreshOffers(); setEditOffer(null); }}
               onCancel={() => setEditOffer(null)}
               showFeedback={showFeedback}
+              onStockWarning={handleOfferStockWarning}
             />
           </div>
 
           <div className="lg:col-span-8 space-y-4">
+            {stockDeactivatedOffers.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-950">
+                <p className="text-xs font-black flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  {stockDeactivatedOffers.length} oferta(s) desactivada(s) automáticamente por falta de stock
+                </p>
+                <div className="mt-2 space-y-1">
+                  {stockDeactivatedOffers.map(o => (
+                    <p key={o.id} className="text-[11px] font-bold">
+                      <span className="font-black">{o.nombre}:</span> Desactivada: producto sin stock
+                      {o.producto_sin_stock_nombre ? ` (${o.producto_sin_stock_nombre})` : ''}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
             {offers.length === 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center shadow-xs">
                 <div className="text-4xl mb-3">🏷️</div>
@@ -787,15 +968,25 @@ export default function Admin() {
                 o.activa ? 'border-gray-200' : 'border-gray-100 opacity-60'
               }`}>
                 <div className="flex-grow">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
                       o.activa ? 'bg-red-100 text-[#e52521]' : 'bg-gray-100 text-gray-500'
                     }`}>
                       {o.activa ? '🔥 ACTIVA' : 'Inactiva'}
                     </span>
                     <span className="text-[10px] text-gray-500 font-extrabold">Prioridad: {o.prioridad}</span>
+                    {o.products.some(p => p.stock <= 0) && (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                        ⚠️ Stock irregular
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-extrabold text-sm text-gray-900">{o.nombre}</h3>
+                  {o.products.some(p => p.stock <= 0) && (
+                    <p className="text-[11px] text-amber-800 font-bold mt-1">
+                      Sin stock: {o.products.filter(p => p.stock <= 0).map(p => p.name).join(', ')}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {o.products.map(p => (
                       <div key={p.id} className="flex items-center gap-1 bg-gray-50 rounded-md px-2 py-1 border border-gray-200">
@@ -815,7 +1006,7 @@ export default function Admin() {
                 </div>
 
                 <div className="flex sm:flex-col gap-2 shrink-0">
-                  <button onClick={() => handleToggleOffer(o.id)}
+                  <button onClick={() => handleToggleOffer(o)}
                     className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold tracking-wider uppercase transition-all cursor-pointer ${
                       o.activa
                         ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
@@ -960,6 +1151,50 @@ export default function Admin() {
           </div>
         );
       })()}
+
+      {activeTab === 'messages' && (
+        <div className="space-y-4 text-left">
+          <div>
+            <h2 className="font-extrabold text-base text-gray-900">Mensajes de clientes</h2>
+            <p className="text-xs text-gray-500 font-semibold mt-1">Consultas y reclamos agrupados por pedido.</p>
+          </div>
+          {messages.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl p-10 text-center shadow-xs">
+              <MessageCircle className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+              <p className="font-extrabold text-gray-900 mb-1">No hay mensajes todavía</p>
+              <p className="text-gray-500 text-xs">Las consultas de los clientes aparecerán acá.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {messages.map(thread => (
+                <button key={thread.pedido_id} type="button" onClick={() => setSelectedMessageThread(thread)} className="w-full bg-white border border-gray-200 rounded-xl p-5 text-left hover:border-[#e52521] hover:shadow-sm transition-all cursor-pointer">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-sm text-gray-900">Pedido #{thread.pedido_id}</span>
+                        {thread.cerrado && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-black border border-gray-200">Cerrado</span>}
+                        {thread.no_leidos > 0 && <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-black">{thread.no_leidos} sin leer</span>}
+                      </div>
+                      <p className="text-xs text-gray-500 font-semibold mt-1">{thread.cliente_nombre} · {thread.cliente_email}</p>
+                    </div>
+                    <MessageCircle className="w-5 h-5 text-gray-300 shrink-0" />
+                  </div>
+                  <p className="text-sm text-gray-700 mt-3 line-clamp-2">{thread.mensajes[thread.mensajes.length - 1]?.contenido}</p>
+                  <p className="text-[10px] text-gray-400 font-bold mt-2">{thread.mensajes.length} mensaje{thread.mensajes.length !== 1 ? 's' : ''}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedMessageThread && (
+        <AdminMessageThread
+          thread={selectedMessageThread}
+          onClose={() => setSelectedMessageThread(null)}
+          onSent={() => { refreshMessages(); }}
+        />
+      )}
     </div>
   );
 }

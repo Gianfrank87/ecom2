@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Menu, X, ShieldCheck, User, Package, LogOut, ChevronDown, Search, Truck, Banknote, Star, Zap } from 'lucide-react';
+import { ShoppingCart, Menu, X, ShieldCheck, User, Package, LogOut, ChevronDown, Search, Truck, Banknote, Star, Zap, MessageCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
@@ -10,9 +10,10 @@ const formatPrice = (value) =>
 
 export default function Navbar() {
   const { getCartCount } = useCart();
-  const { clientUser, clientLogout } = useClientAuth();
+  const { clientUser, clientToken, isAdmin, clientLogout } = useClientAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   
   // Search Autocomplete State
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,6 +24,24 @@ export default function Navbar() {
   const userMenuRef = useRef(null);
   const searchContainerRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const loadUnreadMessages = () => {
+      if (!clientUser) {
+        setUnreadMessages(0);
+        return;
+      }
+      const request = isAdmin ? api.getAdminMessages() : api.getClientOrders(clientToken);
+      request
+        .then(items => setUnreadMessages(isAdmin
+          ? items.reduce((total, thread) => total + thread.no_leidos, 0)
+          : items.reduce((total, order) => total + Number(order.mensajes_no_leidos || 0), 0)))
+        .catch(() => setUnreadMessages(0));
+    };
+    loadUnreadMessages();
+    window.addEventListener('messages-read', loadUnreadMessages);
+    return () => window.removeEventListener('messages-read', loadUnreadMessages);
+  }, [clientUser, clientToken, isAdmin]);
 
   // Load products for client-side instant search autocomplete
   useEffect(() => {
@@ -255,6 +274,11 @@ export default function Navbar() {
                   </span>
                   <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
+                {unreadMessages > 0 && (
+                  <span className="absolute -top-2 -right-2 z-10 min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] border-2 border-white text-white text-[9px] font-black flex items-center justify-center shadow-sm" aria-label={`${unreadMessages} mensajes sin leer`}>
+                    {unreadMessages}
+                  </span>
+                )}
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
@@ -263,14 +287,23 @@ export default function Navbar() {
                       <p className="text-xs font-bold text-gray-900 truncate">{clientUser.name}</p>
                       <p className="text-[10px] text-gray-400 truncate">{clientUser.email}</p>
                     </div>
-                    <Link
-                      to="/mis-pedidos"
-                      onClick={handleLinkClick}
-                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors"
-                    >
-                      <Package className="w-4 h-4" />
-                      Mis Pedidos
-                    </Link>
+                    {isAdmin ? (
+                      <>
+                        <Link to="/admin?tab=sales&view=pending" onClick={handleLinkClick} className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
+                          <Package className="w-4 h-4" /> Pendientes
+                        </Link>
+                        <Link to="/admin?tab=sales&view=resolved" onClick={handleLinkClick} className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
+                          <ShoppingCart className="w-4 h-4" /> Ventas
+                        </Link>
+                        <Link to="/admin?tab=messages" onClick={handleLinkClick} className="flex items-center justify-between gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
+                          <span className="flex items-center gap-2.5"><MessageCircle className="w-4 h-4" /> Mensajes</span>
+                        </Link>
+                      </>
+                    ) : (
+                      <Link to="/mis-pedidos" onClick={handleLinkClick} className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
+                        <Package className="w-4 h-4" /> Mis Pedidos
+                      </Link>
+                    )}
                     <button
                       onClick={handleLogout}
                       className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 w-full transition-colors cursor-pointer"
@@ -293,13 +326,15 @@ export default function Navbar() {
             )}
 
             {/* Admin Access Panel Icon */}
-            <Link
-              to="/admin"
-              className="p-2 text-gray-400 hover:text-slate-900 rounded-lg hover:bg-gray-100 transition-colors"
-              title="Panel Admin"
-            >
-              <ShieldCheck className="w-5 h-5" />
-            </Link>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="p-2 text-gray-400 hover:text-slate-900 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Panel Admin"
+              >
+                <ShieldCheck className="w-5 h-5" />
+              </Link>
+            )}
 
             {/* Cart Button */}
             <Link
@@ -384,13 +419,15 @@ export default function Navbar() {
                 <p className="text-xs font-bold text-gray-900">{clientUser.name}</p>
                 <p className="text-[10px] text-gray-400">{clientUser.email}</p>
               </div>
-              <Link
-                to="/mis-pedidos"
-                onClick={handleLinkClick}
-                className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"
-              >
-                <Package className="w-4 h-4" /> Mis Pedidos
-              </Link>
+              {isAdmin ? (
+                <>
+                      <Link to="/admin?tab=sales&view=pending" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><Package className="w-4 h-4" /> Pendientes</Link>
+                      <Link to="/admin?tab=sales&view=resolved" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><ShoppingCart className="w-4 h-4" /> Ventas</Link>
+                  <Link to="/admin?tab=messages" onClick={handleLinkClick} className="flex items-center justify-between gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><span className="flex items-center gap-2"><MessageCircle className="w-4 h-4" /> Mensajes</span>{isAdmin && unreadMessages > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center">{unreadMessages}</span>}</Link>
+                </>
+              ) : (
+                <Link to="/mis-pedidos" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><Package className="w-4 h-4" /> Mis Pedidos</Link>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 text-sm font-bold text-red-600 py-2 border-b border-gray-100 w-full text-left cursor-pointer"
@@ -407,13 +444,15 @@ export default function Navbar() {
               <User className="w-4 h-4" /> Iniciar Sesión
             </Link>
           )}
-          <Link
-            to="/admin"
-            onClick={handleLinkClick}
-            className="flex items-center gap-2 text-sm font-bold text-gray-600 py-2"
-          >
-            <ShieldCheck className="w-4 h-4" /> Panel Admin
-          </Link>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              onClick={handleLinkClick}
+              className="flex items-center gap-2 text-sm font-bold text-gray-600 py-2"
+            >
+              <ShieldCheck className="w-4 h-4" /> Panel Admin
+            </Link>
+          )}
         </div>
       )}
     </header>

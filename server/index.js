@@ -7,27 +7,29 @@ import { initDB, dbAll, dbGet, dbRun } from './db.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Simple in-memory admin token (hardcoded for dev)
-const ADMIN_TOKEN = 'huellitas-admin-secret-token-2024';
-const ADMIN_USER = 'Admin';
-const ADMIN_PASS = 'Admin';
 const JWT_SECRET = 'huellitas-client-secret-jwt-key-2024'; // For clients
 
 // Enable CORS and JSON parsing
 app.use(cors());
 app.use(express.json());
 
-// Middleware: require admin token
+// Middleware: require an authenticated user with the admin role
 const requireAdmin = (req, res, next) => {
   const auth = req.headers['authorization'];
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No autorizado. Token requerido.' });
   }
   const token = auth.split(' ')[1];
-  if (token !== ADMIN_TOKEN) {
-    return res.status(401).json({ error: 'Token inválido.' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ error: 'No tenés permisos de administrador.' });
+    }
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Token inválido o expirado.' });
   }
-  next();
 };
 
 // Middleware: require client token
@@ -83,27 +85,32 @@ const mapOffer = async (o) => {
     tipo_descuento: o.tipo_descuento || 'precio_paquete',
     prioridad: o.prioridad,
     activa: Boolean(o.activa),
+    desactivada_por_stock: Boolean(o.desactivada_por_stock),
+    producto_sin_stock_id: o.producto_sin_stock_id ? String(o.producto_sin_stock_id) : null,
+    producto_sin_stock_nombre: o.producto_sin_stock_nombre || null,
     vendidos: salesResult?.total || 0
   };
 };
 
-// ─────────────────────────────────────────
-// AUTH ADMIN
-// ─────────────────────────────────────────
+const deactivateOffersForProduct = async (productId, productName) => {
+  const offers = await dbAll('SELECT id, producto_ids FROM ofertas WHERE activa = 1');
+  const affectedOffers = offers.filter((offer) => {
+    const productIds = JSON.parse(offer.producto_ids || '[]').map(String);
+    return productIds.includes(String(productId));
+  });
 
-// POST /api/admin/login
-app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body;
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    return res.json({ token: ADMIN_TOKEN, message: 'Autenticación exitosa' });
+  for (const offer of affectedOffers) {
+    await dbRun(
+      `UPDATE ofertas
+       SET activa = 0, desactivada_por_stock = 1,
+           producto_sin_stock_id = ?, producto_sin_stock_nombre = ?
+       WHERE id = ?`,
+      [productId, productName, offer.id]
+    );
   }
-  return res.status(401).json({ error: 'Credenciales incorrectas' });
-});
 
-// GET /api/admin/verify — check if token is still valid
-app.get('/api/admin/verify', requireAdmin, (req, res) => {
-  res.json({ valid: true });
-});
+  return affectedOffers.length;
+};
 
 // ─────────────────────────────────────────
 // AUTH CLIENTES
@@ -132,14 +139,14 @@ app.post('/api/clients/register', async (req, res) => {
     );
 
     const token = jwt.sign(
-      { id: result.lastID, email, name },
+      { id: result.lastID, email, name, role: 'cliente' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     res.status(201).json({ 
       token, 
-      user: { id: result.lastID, name, email },
+      user: { id: result.lastID, name, email, role: 'cliente' },
       message: 'Registro exitoso' 
     });
   } catch (err) {
@@ -152,10 +159,13 @@ app.post('/api/clients/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+      return res.status(400).json({ error: 'Email o usuario y contraseña son requeridos' });
     }
 
-    const client = await dbGet('SELECT * FROM clientes WHERE email = ?', [email]);
+    const client = await dbGet(
+      'SELECT * FROM clientes WHERE lower(email) = lower(?) OR lower(nombre) = lower(?)',
+      [email, email]
+    );
     if (!client) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
@@ -166,14 +176,14 @@ app.post('/api/clients/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: client.id, email: client.email, name: client.nombre },
+      { id: client.id, email: client.email, name: client.nombre, role: client.rol || 'cliente' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     res.json({ 
       token, 
-      user: { id: client.id, name: client.nombre, email: client.email },
+      user: { id: client.id, name: client.nombre, email: client.email, role: client.rol || 'cliente' },
       message: 'Login exitoso' 
     });
   } catch (err) {
@@ -261,6 +271,7 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
       `UPDATE productos SET nombre=?, descripcion=?, precio=?, stock=?, categoria=?, imagen_url=?, destacado=? WHERE id=?`,
       [name, description, Number(price), Number(stock) || 0, category, image, featured ? 1 : 0, req.params.id]
     );
+    if (Number(stock) === 0) await deactivateOffersForProduct(check.id, name);
     res.json({ message: 'Producto actualizado exitosamente' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -270,10 +281,34 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
 // DELETE /api/products/:id (protected)
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    const check = await dbGet('SELECT id FROM productos WHERE id = ?', [req.params.id]);
+    const check = await dbGet('SELECT id, nombre FROM productos WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Producto no encontrado' });
+    const deactivatedOffers = await deactivateOffersForProduct(check.id, check.nombre);
     await dbRun('DELETE FROM productos WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Producto eliminado exitosamente' });
+    res.json({ message: 'Producto eliminado exitosamente', deactivatedOffers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/products/:id/stock (protected admin)
+app.patch('/api/products/:id/stock', requireAdmin, async (req, res) => {
+  try {
+    const delta = Number(req.body.delta);
+    if (!Number.isInteger(delta) || delta === 0) {
+      return res.status(400).json({ error: 'El delta de stock debe ser un entero distinto de cero' });
+    }
+
+    const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [req.params.id]);
+    if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const newStock = Math.max(0, Number(product.stock) + delta);
+    await dbRun('UPDATE productos SET stock = ? WHERE id = ?', [newStock, product.id]);
+    const deactivatedOffers = newStock === 0
+      ? await deactivateOffersForProduct(product.id, product.nombre)
+      : 0;
+
+    res.json({ stock: newStock, deactivatedOffers });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -298,7 +333,9 @@ app.get('/api/offers/active', async (req, res) => {
   try {
     const rows = await dbAll('SELECT * FROM ofertas WHERE activa = 1 ORDER BY prioridad DESC');
     const offers = await Promise.all(rows.map(mapOffer));
-    res.json(offers);
+    res.json(offers.filter((offer) => (
+      offer.products.length === offer.producto_ids.length && offer.products.every((product) => product.stock > 0)
+    )));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -339,7 +376,7 @@ app.put('/api/offers/:id', requireAdmin, async (req, res) => {
     const check = await dbGet('SELECT id FROM ofertas WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Oferta no encontrada' });
     await dbRun(
-      `UPDATE ofertas SET nombre=?, producto_ids=?, descuento_o_precio_paquete=?, tipo_descuento=?, prioridad=?, activa=? WHERE id=?`,
+      `UPDATE ofertas SET nombre=?, producto_ids=?, descuento_o_precio_paquete=?, tipo_descuento=?, prioridad=?, activa=?, desactivada_por_stock=0, producto_sin_stock_id=NULL, producto_sin_stock_nombre=NULL WHERE id=?`,
       [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, activa ? 1 : 0, req.params.id]
     );
     res.json({ message: 'Oferta actualizada exitosamente' });
@@ -354,7 +391,13 @@ app.patch('/api/offers/:id/toggle', requireAdmin, async (req, res) => {
     const offer = await dbGet('SELECT id, activa FROM ofertas WHERE id = ?', [req.params.id]);
     if (!offer) return res.status(404).json({ error: 'Oferta no encontrada' });
     const newState = offer.activa ? 0 : 1;
-    await dbRun('UPDATE ofertas SET activa = ? WHERE id = ?', [newState, req.params.id]);
+    await dbRun(
+      `UPDATE ofertas
+       SET activa = ?, desactivada_por_stock = 0,
+           producto_sin_stock_id = NULL, producto_sin_stock_nombre = NULL
+       WHERE id = ?`,
+      [newState, req.params.id]
+    );
     res.json({ message: `Oferta ${newState ? 'activada' : 'desactivada'}`, activa: Boolean(newState) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -422,11 +465,187 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   }
 });
 
+const getOrderWithMessageAccess = async (orderId, user) => {
+  const order = await dbGet(
+    `SELECT p.id, p.cliente_id, p.total, p.estado, p.fecha, c.nombre AS cliente_nombre, c.email AS cliente_email
+     FROM pedidos p JOIN clientes c ON p.cliente_id = c.id WHERE p.id = ?`,
+    [orderId]
+  );
+  if (!order) return { error: 'Pedido no encontrado', status: 404 };
+  if (user.role !== 'admin' && String(order.cliente_id) !== String(user.id)) {
+    return { error: 'No tenés permiso para acceder a este pedido.', status: 403 };
+  }
+  return { order };
+};
+
+const getLatestMessageThread = async (orderId) => dbGet(
+  `SELECT hilo_id, cerrado FROM mensajes
+   WHERE pedido_id = ? ORDER BY hilo_id DESC, id DESC LIMIT 1`,
+  [orderId]
+);
+
+// GET /api/orders/:id/messages (owner or admin)
+app.get('/api/orders/:id/messages', requireClient, async (req, res) => {
+  try {
+    const access = await getOrderWithMessageAccess(req.params.id, req.user);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const latest = await getLatestMessageThread(req.params.id);
+    const messages = latest ? await dbAll(
+      'SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE pedido_id = ? AND hilo_id = ? ORDER BY fecha ASC, id ASC',
+      [req.params.id, latest.hilo_id]
+    ) : [];
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/orders/:id/messages (owner or admin)
+app.post('/api/orders/:id/messages', requireClient, async (req, res) => {
+  try {
+    const access = await getOrderWithMessageAccess(req.params.id, req.user);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const contenido = String(req.body.contenido || '').trim();
+    if (!contenido) return res.status(400).json({ error: 'El mensaje no puede estar vacío.' });
+    if (contenido.length > 2000) return res.status(400).json({ error: 'El mensaje no puede superar los 2000 caracteres.' });
+
+    const remitente = req.user.role === 'admin' ? 'admin' : 'cliente';
+    const latest = await getLatestMessageThread(req.params.id);
+    if (latest?.cerrado && !(req.body.nuevo_hilo === true && remitente === 'cliente')) {
+      return res.status(409).json({ error: 'Este reclamo está cerrado. Abrí un reclamo nuevo para continuar.' });
+    }
+    const hiloId = latest ? (latest.cerrado ? latest.hilo_id + 1 : latest.hilo_id) : 1;
+    const result = await dbRun(
+      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, 0, ?, ?, 0)',
+      [req.params.id, remitente, contenido, hiloId, 'mensaje']
+    );
+    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
+    res.status(201).json(message);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/orders/:id/messages/close (admin only)
+app.patch('/api/orders/:id/messages/close', requireAdmin, async (req, res) => {
+  try {
+    const access = await getOrderWithMessageAccess(req.params.id, req.user);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const latest = await getLatestMessageThread(req.params.id);
+    if (!latest || latest.cerrado) return res.status(400).json({ error: 'El reclamo ya está cerrado o no tiene mensajes.' });
+    const result = await dbRun(
+      `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
+       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, 1, ?, 'sistema', 1)`,
+      [req.params.id, latest.hilo_id]
+    );
+    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
+    res.json({ cerrado: true, message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/orders/:id/messages/reopen (owner only)
+app.patch('/api/orders/:id/messages/reopen', requireClient, async (req, res) => {
+  try {
+    const access = await getOrderWithMessageAccess(req.params.id, req.user);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    if (req.user.role === 'admin') return res.status(403).json({ error: 'Sólo el cliente puede reabrir este reclamo.' });
+
+    const latest = await getLatestMessageThread(req.params.id);
+    if (!latest?.cerrado) return res.status(400).json({ error: 'El reclamo ya está abierto.' });
+
+    const nextThreadId = latest.hilo_id + 1;
+    const result = await dbRun(
+      `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
+       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, 1, ?, 'sistema', 0)`,
+      [req.params.id, `${req.user.name} reabrió el reclamo`, nextThreadId]
+    );
+    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
+    res.json({ reabierto: true, message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/orders/:id/messages/read (owner or admin)
+app.patch('/api/orders/:id/messages/read', requireClient, async (req, res) => {
+  try {
+    const access = await getOrderWithMessageAccess(req.params.id, req.user);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const remitente = req.body.remitente === 'admin' ? 'admin' : 'cliente';
+    await dbRun(
+      'UPDATE mensajes SET leido = 1 WHERE pedido_id = ? AND remitente = ? AND leido = 0',
+      [req.params.id, remitente]
+    );
+    res.json({ message: 'Mensajes marcados como leídos.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/messages (admin only, grouped by order)
+app.get('/api/messages', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbAll(
+      `SELECT m.id, m.pedido_id, m.remitente, m.contenido, m.fecha, m.leido, m.hilo_id, m.tipo, m.cerrado,
+              p.total, p.estado, p.fecha AS pedido_fecha,
+              c.nombre AS cliente_nombre, c.email AS cliente_email
+       FROM mensajes m
+       JOIN pedidos p ON p.id = m.pedido_id
+       JOIN clientes c ON c.id = p.cliente_id
+       ORDER BY m.fecha ASC, m.id ASC`
+    );
+    const latestThreadByOrder = new Map();
+    for (const row of rows) {
+      const knownThread = latestThreadByOrder.get(row.pedido_id);
+      if (!knownThread || row.hilo_id > knownThread) latestThreadByOrder.set(row.pedido_id, row.hilo_id);
+    }
+    const grouped = new Map();
+    for (const row of rows.filter(row => row.hilo_id === latestThreadByOrder.get(row.pedido_id))) {
+      if (!grouped.has(row.pedido_id)) {
+        grouped.set(row.pedido_id, {
+          pedido_id: row.pedido_id,
+          total: row.total,
+          estado: row.estado,
+          pedido_fecha: row.pedido_fecha,
+          cliente_nombre: row.cliente_nombre,
+          cliente_email: row.cliente_email,
+          mensajes: [],
+          no_leidos: 0,
+          cerrado: false
+        });
+      }
+      const thread = grouped.get(row.pedido_id);
+      thread.mensajes.push({
+        id: row.id,
+        pedido_id: row.pedido_id,
+        remitente: row.remitente,
+        contenido: row.contenido,
+        fecha: row.fecha,
+        leido: Boolean(row.leido),
+        hilo_id: row.hilo_id,
+        tipo: row.tipo || 'mensaje',
+        cerrado: Boolean(row.cerrado)
+      });
+      thread.cerrado = Boolean(row.cerrado);
+      if (row.remitente === 'cliente' && !row.leido) thread.no_leidos += 1;
+    }
+    res.json([...grouped.values()].reverse());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/clients/orders (protected client)
 app.get('/api/clients/orders', requireClient, async (req, res) => {
   try {
     const orders = await dbAll(`
-      SELECT * FROM pedidos 
+      SELECT p.*,
+        (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id) AS mensajes_count,
+        (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id AND m.remitente = 'admin' AND m.tipo = 'mensaje' AND m.leido = 0) AS mensajes_no_leidos,
+        COALESCE((SELECT m.cerrado FROM mensajes m WHERE m.pedido_id = p.id ORDER BY m.hilo_id DESC, m.id DESC LIMIT 1), 0) AS hilo_cerrado
+      FROM pedidos p
       WHERE cliente_id = ? 
       ORDER BY fecha DESC
     `, [req.user.id]);
@@ -450,13 +669,46 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
 
 // POST /api/orders (protected client)
 app.post('/api/orders', requireClient, async (req, res) => {
+  let transactionStarted = false;
   try {
     const { items, total } = req.body;
     if (!items || items.length === 0) {
       return res.status(400).json({ error: 'El pedido no tiene items' });
     }
 
-    // 1. Crear el pedido
+    // IMMEDIATE locks the write connection while validation and checkout run.
+    await dbRun('BEGIN IMMEDIATE TRANSACTION');
+    transactionStarted = true;
+
+    const requestedByProduct = new Map();
+    for (const item of items) {
+      const products = item.isOffer ? item.products : [item];
+      for (const product of products || []) {
+        const quantity = Number(item.quantity);
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          throw Object.assign(new Error('La cantidad solicitada no es válida.'), { status: 400 });
+        }
+        const productId = String(product.id);
+        const current = requestedByProduct.get(productId) || { quantity: 0, name: product.name || 'Producto' };
+        current.quantity += quantity;
+        requestedByProduct.set(productId, current);
+      }
+    }
+
+    for (const [productId, requested] of requestedByProduct) {
+      const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
+      if (!product) {
+        throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
+      }
+      if (requested.quantity > Number(product.stock)) {
+        throw Object.assign(
+          new Error(`Solo quedan ${product.stock} unidades de ${product.nombre}.`),
+          { status: 409, productId: product.id, available: product.stock, productName: product.nombre }
+        );
+      }
+    }
+
+    // 1. Crear el pedido, only after every item passed validation.
     const orderResult = await dbRun(
       'INSERT INTO pedidos (cliente_id, total, estado) VALUES (?, ?, ?)',
       [req.user.id, Number(total), 'pendiente']
@@ -476,6 +728,8 @@ app.post('/api/orders', requireClient, async (req, res) => {
             'UPDATE productos SET stock = MAX(0, stock - ?) WHERE id = ?',
             [item.quantity, p.id]
           );
+          const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [p.id]);
+          if (product?.stock === 0) await deactivateOffersForProduct(product.id, product.nombre);
         }
       } else {
         await dbRun(
@@ -486,15 +740,27 @@ app.post('/api/orders', requireClient, async (req, res) => {
           'UPDATE productos SET stock = MAX(0, stock - ?) WHERE id = ?',
           [item.quantity, item.id]
         );
+        const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [item.id]);
+        if (product?.stock === 0) await deactivateOffersForProduct(product.id, product.nombre);
       }
     }
 
+    await dbRun('COMMIT');
+    transactionStarted = false;
     res.status(201).json({ 
       orderId: pedidoId, 
       message: 'Pedido creado exitosamente' 
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (transactionStarted) {
+      try { await dbRun('ROLLBACK'); } catch (_) {}
+    }
+    res.status(err.status || 500).json({
+      error: err.message,
+      productId: err.productId,
+      available: err.available,
+      productName: err.productName
+    });
   }
 });
 

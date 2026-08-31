@@ -74,6 +74,22 @@ export const CartProvider = ({ children }) => {
     );
   };
 
+  const updateItemStock = (productId, stock) => {
+    setCart((prevCart) => prevCart.map((item) => {
+      if (item.id === productId) {
+        return { ...item, stock, quantity: Math.min(item.quantity, stock) };
+      }
+      if (item.isOffer && item.products?.some((product) => product.id === productId)) {
+        return {
+          ...item,
+          quantity: Math.min(item.quantity, stock),
+          products: item.products.map((product) => product.id === productId ? { ...product, stock } : product)
+        };
+      }
+      return item;
+    }));
+  };
+
   const clearCart = () => {
     setCart([]);
     showToast('Carrito vaciado.', 'info');
@@ -94,6 +110,7 @@ export const CartProvider = ({ children }) => {
         addToCart,
         removeFromCart,
         updateQuantity,
+        updateItemStock,
         clearCart,
         getCartTotal,
         getCartCount,

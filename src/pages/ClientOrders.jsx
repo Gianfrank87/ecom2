@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
-import { Package, Clock, CheckCircle, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, Clock, CheckCircle, Truck, AlertCircle, ChevronDown, ChevronUp, MessageCircle, Send, X } from 'lucide-react';
 
 const formatPrice = (value) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value);
@@ -31,7 +31,114 @@ const STATUS_CONFIG = {
   }
 };
 
-function OrderCard({ order }) {
+function MessageThread({ order, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [closed, setClosed] = useState(Boolean(order.hilo_cerrado));
+
+  const loadMessages = () => {
+    setLoading(true);
+    api.getOrderMessages(order.id)
+      .then(data => {
+        setMessages(data);
+        setClosed(Boolean(data.some(message => message.cerrado)));
+      })
+      .then(() => api.markOrderMessagesRead(order.id, 'admin'))
+      .then(() => window.dispatchEvent(new Event('messages-read')))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadMessages();
+  }, [order.id]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!content.trim() || sending) return;
+    setSending(true);
+    setError('');
+    try {
+      await api.sendOrderMessage(order.id, content.trim());
+      setContent('');
+      loadMessages();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setError('');
+    try {
+      await api.reopenOrderMessages(order.id);
+      setClosed(false);
+      loadMessages();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-lg rounded-2xl border border-accent-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between gap-3 p-5 border-b border-accent-50">
+          <div>
+            <h2 className="font-display font-extrabold text-lg text-gray-800 flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-accent-500" /> Pedido #{order.id}
+            </h2>
+            <p className="text-xs text-gray-400 mt-1">Consultas y reclamos sobre tu pedido</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer" title="Cerrar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-primary-50/30 min-h-[240px]">
+          {loading ? (
+            <p className="text-center text-sm text-gray-400 py-10">Cargando mensajes...</p>
+          ) : messages.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-10">Todavía no hay mensajes. Escribile al admin sobre este pedido.</p>
+          ) : messages.map(message => message.tipo === 'sistema' ? (
+            <div key={message.id} className="text-center py-2">
+              <span className="inline-block px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs italic">{message.contenido}</span>
+            </div>
+          ) : (
+            <div key={message.id} className={`flex ${message.remitente === 'cliente' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[82%] rounded-2xl px-4 py-3 ${message.remitente === 'cliente' ? 'bg-accent-500 text-white rounded-br-sm' : 'bg-white border border-accent-100 text-gray-700 rounded-bl-sm'}`}>
+                <p className="text-sm whitespace-pre-wrap break-words">{message.contenido}</p>
+                <p className={`text-[10px] mt-1 ${message.remitente === 'cliente' ? 'text-white/70' : 'text-gray-400'}`}>
+                  {message.remitente === 'cliente' ? 'Vos' : 'Huellitas & Cía'} · {formatDate(message.fecha)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {error && <p className="px-5 pt-3 text-xs font-bold text-red-600">{error}</p>}
+        {closed ? (
+          <div className="p-4 border-t border-accent-50 flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">Este reclamo está cerrado.</p>
+            <button type="button" onClick={handleReopen} className="px-3 py-2 rounded-xl bg-accent-500 hover:bg-accent-600 text-white text-xs font-bold cursor-pointer">Abrir reclamo nuevo</button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-4 border-t border-accent-50 flex gap-2">
+            <textarea value={content} onChange={event => setContent(event.target.value)} placeholder="Escribí tu mensaje..." rows="2" maxLength="2000" className="flex-1 resize-none px-3 py-2 rounded-xl border border-accent-100 bg-primary-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent-400 text-sm" />
+            <button type="submit" disabled={sending || !content.trim()} className="self-end p-3 rounded-xl bg-accent-500 hover:bg-accent-600 disabled:opacity-40 text-white cursor-pointer disabled:cursor-not-allowed" title="Enviar mensaje" aria-label="Enviar mensaje">
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OrderCard({ order, onContact }) {
   const [expanded, setExpanded] = useState(false);
   const status = STATUS_CONFIG[order.estado] || STATUS_CONFIG.pendiente;
   const StatusIcon = status.icon;
@@ -65,6 +172,14 @@ function OrderCard({ order }) {
             className="p-1.5 rounded-lg hover:bg-accent-50 transition-colors text-gray-400"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => onContact(order)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${order.mensajes_count > 0 ? 'bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-100' : 'bg-accent-50 hover:bg-accent-100 text-accent-600 border-accent-100'}`}
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{order.mensajes_count > 0 ? 'Abrir chat' : 'Contactar sobre este pedido'}</span>
+            <span className="sm:hidden">{order.mensajes_count > 0 ? 'Abrir chat' : 'Contactar'}</span>
           </button>
         </div>
       </div>
@@ -109,6 +224,7 @@ export default function ClientOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [contactOrder, setContactOrder] = useState(null);
 
   useEffect(() => {
     if (!clientUser) {
@@ -167,10 +283,11 @@ export default function ClientOrders() {
             {orders.length} pedido{orders.length !== 1 ? 's' : ''} realizados
           </p>
           {orders.map(order => (
-            <OrderCard key={order.id} order={order} />
+            <OrderCard key={order.id} order={order} onContact={setContactOrder} />
           ))}
         </div>
       )}
+      {contactOrder && <MessageThread order={contactOrder} onClose={() => setContactOrder(null)} />}
     </div>
   );
 }

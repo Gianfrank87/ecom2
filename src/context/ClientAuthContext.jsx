@@ -16,6 +16,7 @@ export const ClientAuthProvider = ({ children }) => {
 
   // On mount: restore token from localStorage and verify it
   useEffect(() => {
+    localStorage.removeItem('huellitas_admin_token');
     const saved = localStorage.getItem('huellitas_client_token');
     if (saved) {
       api.verifyClient(saved)
@@ -44,8 +45,10 @@ export const ClientAuthProvider = ({ children }) => {
     setClientUser(null);
   };
 
+  const isAdmin = clientUser?.role === 'admin';
+
   return (
-    <ClientAuthContext.Provider value={{ clientToken, clientUser, authLoading, clientLogin, clientLogout }}>
+    <ClientAuthContext.Provider value={{ clientToken, clientUser, isAdmin, authLoading, clientLogin, clientLogout }}>
       {children}
     </ClientAuthContext.Provider>
   );

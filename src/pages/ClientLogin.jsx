@@ -5,7 +5,7 @@ import { api } from '../services/api';
 import { AlertCircle } from 'lucide-react';
 
 export default function ClientLogin() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,14 +21,14 @@ export default function ClientLogin() {
     e.preventDefault();
     setError('');
     
-    if (!email || !password) {
+    if (!identifier || !password) {
       setError('Por favor, completa todos los campos.');
       return;
     }
 
     setLoading(true);
     try {
-      const data = await api.clientLogin(email, password);
+      const data = await api.clientLogin(identifier, password);
       clientLogin(data.token, data.user);
       navigate(from);
     } catch (err) {
@@ -59,12 +59,12 @@ export default function ClientLogin() {
 
         <form onSubmit={handleSubmit} className="space-y-4 text-left">
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email o usuario</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@email.com"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="tu@email.com o Admin"
               className="w-full px-4 py-2.5 rounded-xl border border-accent-100 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-400 text-sm font-body transition-all"
             />
           </div>
