@@ -12,7 +12,14 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
 
 // Enable CORS and JSON parsing
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://ecomlau-mauve.vercel.app',
+    'https://ecommercelaura.onrender.com'
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 
 // Middleware: require an authenticated user with the admin role
@@ -95,7 +102,7 @@ const mapOffer = async (o) => {
 };
 
 const deactivateOffersForProduct = async (productId, productName) => {
-  const offers = await dbAll('SELECT id, producto_ids FROM ofertas WHERE activa = 1');
+  const offers = await dbAll('SELECT id, producto_ids FROM ofertas WHERE activa = TRUE');
   const affectedOffers = offers.filter((offer) => {
     const productIds = JSON.parse(offer.producto_ids || '[]').map(String);
     return productIds.includes(String(productId));
@@ -104,7 +111,7 @@ const deactivateOffersForProduct = async (productId, productName) => {
   for (const offer of affectedOffers) {
     await dbRun(
       `UPDATE ofertas
-       SET activa = 0, desactivada_por_stock = 1,
+       SET activa = FALSE, desactivada_por_stock = TRUE,
            producto_sin_stock_id = ?, producto_sin_stock_nombre = ?
        WHERE id = ?`,
       [productId, productName, offer.id]
@@ -205,7 +212,7 @@ app.get('/api/clients/verify', requireClient, (req, res) => {
 // GET /api/products
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await dbAll('SELECT * FROM productos WHERE activo = 1 ORDER BY orden ASC, id ASC');
+    const products = await dbAll('SELECT * FROM productos WHERE activo = TRUE ORDER BY orden ASC, id ASC');
     res.json(products.map(mapProduct));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -236,8 +243,8 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
       `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo, orden)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-      [name, description, Number(price), Number(stock) || 0, normalizedCategory, image, featured ? 1 : 0, nextOrden]
+       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
+      [name, description, Number(price), Number(stock) || 0, normalizedCategory, image, Boolean(featured), nextOrden]
     );
     res.status(201).json({ id: String(result.lastID), message: 'Producto creado exitosamente' });
   } catch (err) {
@@ -273,7 +280,7 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
     if (!check) return res.status(404).json({ error: 'Producto no encontrado' });
     await dbRun(
       `UPDATE productos SET nombre=?, descripcion=?, precio=?, stock=?, categoria=?, imagen_url=?, destacado=? WHERE id=?`,
-      [name, description, Number(price), Number(stock) || 0, category, image, featured ? 1 : 0, req.params.id]
+      [name, description, Number(price), Number(stock) || 0, category, image, Boolean(featured), req.params.id]
     );
     if (Number(stock) === 0) await deactivateOffersForProduct(check.id, name);
     res.json({ message: 'Producto actualizado exitosamente' });
@@ -335,7 +342,7 @@ app.get('/api/categories', async (req, res) => {
 // GET /api/offers/active — public, for Home & Catalog
 app.get('/api/offers/active', async (req, res) => {
   try {
-    const rows = await dbAll('SELECT * FROM ofertas WHERE activa = 1 ORDER BY prioridad DESC');
+    const rows = await dbAll('SELECT * FROM ofertas WHERE activa = TRUE ORDER BY prioridad DESC');
     const offers = await Promise.all(rows.map(mapOffer));
     res.json(offers.filter((offer) => (
       offer.products.length === offer.producto_ids.length && offer.products.every((product) => product.stock > 0)
@@ -365,7 +372,7 @@ app.post('/api/offers', requireAdmin, async (req, res) => {
     }
     const result = await dbRun(
       `INSERT INTO ofertas (nombre, producto_ids, descuento_o_precio_paquete, tipo_descuento, prioridad, activa) VALUES (?,?,?,?,?,?)`,
-      [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, activa ? 1 : 0]
+      [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, Boolean(activa)]
     );
     res.status(201).json({ id: String(result.lastID), message: 'Oferta creada exitosamente' });
   } catch (err) {
@@ -381,7 +388,7 @@ app.put('/api/offers/:id', requireAdmin, async (req, res) => {
     if (!check) return res.status(404).json({ error: 'Oferta no encontrada' });
     await dbRun(
       `UPDATE ofertas SET nombre=?, producto_ids=?, descuento_o_precio_paquete=?, tipo_descuento=?, prioridad=?, activa=?, desactivada_por_stock=0, producto_sin_stock_id=NULL, producto_sin_stock_nombre=NULL WHERE id=?`,
-      [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, activa ? 1 : 0, req.params.id]
+      [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, Boolean(activa), req.params.id]
     );
     res.json({ message: 'Oferta actualizada exitosamente' });
   } catch (err) {
@@ -394,10 +401,10 @@ app.patch('/api/offers/:id/toggle', requireAdmin, async (req, res) => {
   try {
     const offer = await dbGet('SELECT id, activa FROM ofertas WHERE id = ?', [req.params.id]);
     if (!offer) return res.status(404).json({ error: 'Oferta no encontrada' });
-    const newState = offer.activa ? 0 : 1;
+    const newState = offer.activa ? false : true;
     await dbRun(
       `UPDATE ofertas
-       SET activa = ?, desactivada_por_stock = 0,
+       SET activa = ?, desactivada_por_stock = FALSE,
            producto_sin_stock_id = NULL, producto_sin_stock_nombre = NULL
        WHERE id = ?`,
       [newState, req.params.id]
@@ -520,7 +527,7 @@ app.post('/api/orders/:id/messages', requireClient, async (req, res) => {
     }
     const hiloId = latest ? (latest.cerrado ? latest.hilo_id + 1 : latest.hilo_id) : 1;
     const result = await dbRun(
-      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, 0, ?, ?, 0)',
+      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, FALSE, ?, ?, FALSE)',
       [req.params.id, remitente, contenido, hiloId, 'mensaje']
     );
     const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
@@ -539,7 +546,7 @@ app.patch('/api/orders/:id/messages/close', requireAdmin, async (req, res) => {
     if (!latest || latest.cerrado) return res.status(400).json({ error: 'El reclamo ya está cerrado o no tiene mensajes.' });
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, 1, ?, 'sistema', 1)`,
+       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, TRUE, ?, 'sistema', TRUE)`,
       [req.params.id, latest.hilo_id]
     );
     const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
@@ -562,7 +569,7 @@ app.patch('/api/orders/:id/messages/reopen', requireClient, async (req, res) => 
     const nextThreadId = latest.hilo_id + 1;
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, 1, ?, 'sistema', 0)`,
+       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, TRUE, ?, 'sistema', FALSE)`,
       [req.params.id, `${req.user.name} reabrió el reclamo`, nextThreadId]
     );
     const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
@@ -579,7 +586,7 @@ app.patch('/api/orders/:id/messages/read', requireClient, async (req, res) => {
     if (access.error) return res.status(access.status).json({ error: access.error });
     const remitente = req.body.remitente === 'admin' ? 'admin' : 'cliente';
     await dbRun(
-      'UPDATE mensajes SET leido = 1 WHERE pedido_id = ? AND remitente = ? AND leido = 0',
+      'UPDATE mensajes SET leido = TRUE WHERE pedido_id = ? AND remitente = ? AND leido = FALSE',
       [req.params.id, remitente]
     );
     res.json({ message: 'Mensajes marcados como leídos.' });
@@ -647,7 +654,7 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
     const orders = await dbAll(`
       SELECT p.*,
         (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id) AS mensajes_count,
-        (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id AND m.remitente = 'admin' AND m.tipo = 'mensaje' AND m.leido = 0) AS mensajes_no_leidos,
+        (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id AND m.remitente = 'admin' AND m.tipo = 'mensaje' AND m.leido = FALSE) AS mensajes_no_leidos,
         COALESCE((SELECT m.cerrado FROM mensajes m WHERE m.pedido_id = p.id ORDER BY m.hilo_id DESC, m.id DESC LIMIT 1), 0) AS hilo_cerrado
       FROM pedidos p
       WHERE cliente_id = ? 
