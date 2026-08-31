@@ -4,19 +4,23 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "dev": "vite --config client/vite.config.js",
+    "build": "vite --config client/vite.config.js build",
+    "lint": "oxlint \"client/src/**/*.{js,jsx}\"",
+    "preview": "vite --config client/vite.config.js preview",
+    "dev:server": "node --env-file=.env server/index.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "dotenv": "^17.4.2",
     "lucide-react": "^1.31.0",
+    "pg": "^8.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2"
+    "react-router-dom": "^7.18.2",
+    "sqlite3": "^6.0.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

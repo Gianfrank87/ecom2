@@ -2,7 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { initDB, dbAll, dbGet, dbRun } from './db.js';
+import dotenv from 'dotenv';
+import { dbAll, dbGet, dbRun } from './db.js';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -228,12 +231,14 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     if (!name || !price || !category) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precio, categoría)' });
     }
+
+    const normalizedCategory = String(category).trim().toLowerCase();
     const maxOrdenRow = await dbGet('SELECT COALESCE(MAX(orden), 0) as maxOrden FROM productos');
     const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
       `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo, orden)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-      [name, description, Number(price), Number(stock) || 0, category, image, featured ? 1 : 0, nextOrden]
+      [name, description, Number(price), Number(stock) || 0, normalizedCategory, image, featured ? 1 : 0, nextOrden]
     );
     res.status(201).json({ id: String(result.lastID), message: 'Producto creado exitosamente' });
   } catch (err) {
@@ -317,7 +322,7 @@ app.patch('/api/products/:id/stock', requireAdmin, async (req, res) => {
 // GET /api/categories
 app.get('/api/categories', async (req, res) => {
   try {
-    const categories = await dbAll('SELECT * FROM categorias');
+    const categories = await dbAll('SELECT * FROM categorias ORDER BY nombre ASC');
     res.json(categories.map((c) => ({ id: String(c.id), name: c.nombre })));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -767,10 +772,6 @@ app.post('/api/orders', requireClient, async (req, res) => {
 // ─────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────
-initDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
-  });
-}).catch((err) => {
-  console.error('Error iniciando base de datos y servidor', err);
+app.listen(PORT, () => {
+  console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
 });

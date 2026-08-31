@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // All protected requests use the single authenticated session token.
 const getSessionToken = () => localStorage.getItem('huellitas_client_token');
