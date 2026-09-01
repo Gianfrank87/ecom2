@@ -736,7 +736,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
             [pedidoId, p.id, item.quantity, pricePerItem, item.offerId]
           );
           await dbRun(
-            'UPDATE productos SET stock = MAX(0, stock - ?) WHERE id = ?',
+            'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
             [item.quantity, p.id]
           );
           const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [p.id]);
@@ -748,7 +748,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
           [pedidoId, item.id, item.quantity, item.price]
         );
         await dbRun(
-          'UPDATE productos SET stock = MAX(0, stock - ?) WHERE id = ?',
+          'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
           [item.quantity, item.id]
         );
         const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [item.id]);
