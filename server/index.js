@@ -550,7 +550,7 @@ app.patch('/api/orders/:id/messages/close', requireAdmin, async (req, res) => {
     if (!latest || latest.cerrado) return res.status(400).json({ error: 'El reclamo ya está cerrado o no tiene mensajes.' });
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, TRUE, ?, 'sistema', TRUE) RETURNING id`,
+       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, FALSE, ?, 'sistema', TRUE) RETURNING id`,
       [req.params.id, latest.hilo_id]
     );
     const messageId = result.rows?.[0]?.id ?? result.lastID;
@@ -660,7 +660,7 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
     const orders = await dbAll(`
       SELECT p.*,
         (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id) AS mensajes_count,
-        (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id AND m.remitente = 'admin' AND m.tipo = 'mensaje' AND m.leido = FALSE) AS mensajes_no_leidos,
+        (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id AND m.remitente = 'admin' AND m.tipo IN ('mensaje', 'sistema') AND m.leido = FALSE) AS mensajes_no_leidos,
         COALESCE((SELECT m.cerrado FROM mensajes m WHERE m.pedido_id = p.id ORDER BY m.hilo_id DESC, m.id DESC LIMIT 1), FALSE) AS hilo_cerrado
       FROM pedidos p
       WHERE cliente_id = ? 
