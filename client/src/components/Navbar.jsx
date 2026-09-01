@@ -14,6 +14,7 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [adminNotifications, setAdminNotifications] = useState({ sales: 0, messages: 0 });
   
   // Search Autocomplete State
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,15 +30,35 @@ export default function Navbar() {
     const loadUnreadMessages = () => {
       if (!clientUser) {
         setUnreadMessages(0);
+        setAdminNotifications({ sales: 0, messages: 0 });
         return;
       }
-      const request = isAdmin ? api.getAdminMessages() : api.getClientOrders(clientToken);
-      request
-        .then(items => setUnreadMessages(isAdmin
-          ? items.reduce((total, thread) => total + thread.no_leidos, 0)
-          : items.reduce((total, order) => total + Number(order.mensajes_no_leidos || 0), 0)))
+
+      if (isAdmin) {
+        Promise.all([
+          api.getAdminMessages(),
+          api.getOrders()
+        ])
+          .then(([messageThreads, orders]) => {
+            const salesCount = orders.filter((order) => order.estado === 'pendiente').length;
+            const messagesCount = messageThreads.reduce((total, thread) => total + thread.no_leidos, 0);
+            setUnreadMessages(messagesCount);
+            setAdminNotifications({ sales: salesCount, messages: messagesCount });
+          })
+          .catch(() => {
+            setUnreadMessages(0);
+            setAdminNotifications({ sales: 0, messages: 0 });
+          });
+        return;
+      }
+
+      api.getClientOrders(clientToken)
+        .then((orders) => setUnreadMessages(
+          orders.reduce((total, order) => total + Number(order.mensajes_no_leidos || 0), 0)
+        ))
         .catch(() => setUnreadMessages(0));
     };
+
     loadUnreadMessages();
     window.addEventListener('messages-read', loadUnreadMessages);
     return () => window.removeEventListener('messages-read', loadUnreadMessages);
@@ -90,6 +111,8 @@ export default function Navbar() {
     setUserMenuOpen(false);
     setShowSuggestions(false);
   };
+
+  const totalAdminNotifications = adminNotifications.sales + adminNotifications.messages;
 
   const handleLogout = () => {
     clientLogout();
@@ -274,9 +297,9 @@ export default function Navbar() {
                   </span>
                   <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {unreadMessages > 0 && (
-                  <span className="absolute -top-2 -right-2 z-10 min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] border-2 border-white text-white text-[9px] font-black flex items-center justify-center shadow-sm" aria-label={`${unreadMessages} mensajes sin leer`}>
-                    {unreadMessages}
+                {totalAdminNotifications > 0 && (
+                  <span className="absolute -top-2 -right-2 z-10 min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] border-2 border-white text-white text-[9px] font-black flex items-center justify-center shadow-sm" aria-label={`${totalAdminNotifications} notificaciones pendientes`}>
+                    {totalAdminNotifications}
                   </span>
                 )}
 
@@ -289,14 +312,20 @@ export default function Navbar() {
                     </div>
                     {isAdmin ? (
                       <>
-                        <Link to="/admin?tab=sales&view=pending" onClick={handleLinkClick} className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
-                          <Package className="w-4 h-4" /> Pendientes
+                        <Link to="/admin?tab=sales&view=pending" onClick={handleLinkClick} className="flex items-center justify-between gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
+                          <span className="flex items-center gap-2.5"><Package className="w-4 h-4" /> Pendientes</span>
+                          {adminNotifications.sales > 0 && (
+                            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center">{adminNotifications.sales}</span>
+                          )}
                         </Link>
                         <Link to="/admin?tab=sales&view=resolved" onClick={handleLinkClick} className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
                           <ShoppingCart className="w-4 h-4" /> Ventas
                         </Link>
                         <Link to="/admin?tab=messages" onClick={handleLinkClick} className="flex items-center justify-between gap-2.5 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-[#e52521] transition-colors">
                           <span className="flex items-center gap-2.5"><MessageCircle className="w-4 h-4" /> Mensajes</span>
+                          {adminNotifications.messages > 0 && (
+                            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center">{adminNotifications.messages}</span>
+                          )}
                         </Link>
                       </>
                     ) : (
@@ -421,9 +450,12 @@ export default function Navbar() {
               </div>
               {isAdmin ? (
                 <>
-                      <Link to="/admin?tab=sales&view=pending" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><Package className="w-4 h-4" /> Pendientes</Link>
-                      <Link to="/admin?tab=sales&view=resolved" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><ShoppingCart className="w-4 h-4" /> Ventas</Link>
-                  <Link to="/admin?tab=messages" onClick={handleLinkClick} className="flex items-center justify-between gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><span className="flex items-center gap-2"><MessageCircle className="w-4 h-4" /> Mensajes</span>{isAdmin && unreadMessages > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center">{unreadMessages}</span>}</Link>
+                  <Link to="/admin?tab=sales&view=pending" onClick={handleLinkClick} className="flex items-center justify-between gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100">
+                    <span className="flex items-center gap-2"><Package className="w-4 h-4" /> Pendientes</span>
+                    {adminNotifications.sales > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center">{adminNotifications.sales}</span>}
+                  </Link>
+                  <Link to="/admin?tab=sales&view=resolved" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><ShoppingCart className="w-4 h-4" /> Ventas</Link>
+                  <Link to="/admin?tab=messages" onClick={handleLinkClick} className="flex items-center justify-between gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><span className="flex items-center gap-2"><MessageCircle className="w-4 h-4" /> Mensajes</span>{adminNotifications.messages > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#e52521] text-white text-[10px] font-black flex items-center justify-center">{adminNotifications.messages}</span>}</Link>
                 </>
               ) : (
                 <Link to="/mis-pedidos" onClick={handleLinkClick} className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#e52521] py-2 border-b border-gray-100"><Package className="w-4 h-4" /> Mis Pedidos</Link>

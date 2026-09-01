@@ -143,19 +143,20 @@ app.post('/api/clients/register', async (req, res) => {
     const hash = await bcrypt.hash(password, salt);
 
     const result = await dbRun(
-      'INSERT INTO clientes (nombre, email, password_hash) VALUES (?, ?, ?)',
+      'INSERT INTO clientes (nombre, email, password_hash) VALUES (?, ?, ?) RETURNING id',
       [name, email, hash]
     );
+    const newClientId = result.rows?.[0]?.id ?? result.lastID;
 
     const token = jwt.sign(
-      { id: result.lastID, email, name, role: 'cliente' },
+      { id: newClientId, email, name, role: 'cliente' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     res.status(201).json({ 
       token, 
-      user: { id: result.lastID, name, email, role: 'cliente' },
+      user: { id: newClientId, name, email, role: 'cliente' },
       message: 'Registro exitoso' 
     });
   } catch (err) {
@@ -243,10 +244,11 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
       `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo, orden)
-       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?) RETURNING id`,
       [name, description, Number(price), Number(stock) || 0, normalizedCategory, image, Boolean(featured), nextOrden]
     );
-    res.status(201).json({ id: String(result.lastID), message: 'Producto creado exitosamente' });
+    const newProductId = result.rows?.[0]?.id ?? result.lastID;
+    res.status(201).json({ id: String(newProductId), message: 'Producto creado exitosamente' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -371,10 +373,11 @@ app.post('/api/offers', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Se requiere nombre y al menos 2 productos.' });
     }
     const result = await dbRun(
-      `INSERT INTO ofertas (nombre, producto_ids, descuento_o_precio_paquete, tipo_descuento, prioridad, activa) VALUES (?,?,?,?,?,?)`,
+      `INSERT INTO ofertas (nombre, producto_ids, descuento_o_precio_paquete, tipo_descuento, prioridad, activa) VALUES (?,?,?,?,?,?) RETURNING id`,
       [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, Boolean(activa)]
     );
-    res.status(201).json({ id: String(result.lastID), message: 'Oferta creada exitosamente' });
+    const newOfferId = result.rows?.[0]?.id ?? result.lastID;
+    res.status(201).json({ id: String(newOfferId), message: 'Oferta creada exitosamente' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -527,10 +530,11 @@ app.post('/api/orders/:id/messages', requireClient, async (req, res) => {
     }
     const hiloId = latest ? (latest.cerrado ? latest.hilo_id + 1 : latest.hilo_id) : 1;
     const result = await dbRun(
-      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, FALSE, ?, ?, FALSE)',
+      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, FALSE, ?, ?, FALSE) RETURNING id',
       [req.params.id, remitente, contenido, hiloId, 'mensaje']
     );
-    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
+    const messageId = result.rows?.[0]?.id ?? result.lastID;
+    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [messageId]);
     res.status(201).json(message);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -546,10 +550,11 @@ app.patch('/api/orders/:id/messages/close', requireAdmin, async (req, res) => {
     if (!latest || latest.cerrado) return res.status(400).json({ error: 'El reclamo ya está cerrado o no tiene mensajes.' });
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, TRUE, ?, 'sistema', TRUE)`,
+       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, TRUE, ?, 'sistema', TRUE) RETURNING id`,
       [req.params.id, latest.hilo_id]
     );
-    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
+    const messageId = result.rows?.[0]?.id ?? result.lastID;
+    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [messageId]);
     res.json({ cerrado: true, message });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -569,10 +574,11 @@ app.patch('/api/orders/:id/messages/reopen', requireClient, async (req, res) => 
     const nextThreadId = latest.hilo_id + 1;
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, TRUE, ?, 'sistema', FALSE)`,
+       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, TRUE, ?, 'sistema', FALSE) RETURNING id`,
       [req.params.id, `${req.user.name} reabrió el reclamo`, nextThreadId]
     );
-    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [result.lastID]);
+    const messageId = result.rows?.[0]?.id ?? result.lastID;
+    const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [messageId]);
     res.json({ reabierto: true, message });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -721,10 +727,10 @@ app.post('/api/orders', requireClient, async (req, res) => {
 
     // 1. Crear el pedido, only after every item passed validation.
     const orderResult = await dbRun(
-      'INSERT INTO pedidos (cliente_id, total, estado) VALUES (?, ?, ?)',
+      'INSERT INTO pedidos (cliente_id, total, estado) VALUES (?, ?, ?) RETURNING id',
       [req.user.id, Number(total), 'pendiente']
     );
-    const pedidoId = orderResult.lastID;
+    const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
 
     // 2. Insertar items y descontar stock
     for (const item of items) {

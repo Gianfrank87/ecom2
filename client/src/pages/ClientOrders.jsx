@@ -219,7 +219,7 @@ function OrderCard({ order, onContact }) {
 }
 
 export default function ClientOrders() {
-  const { clientUser, clientToken } = useClientAuth();
+  const { clientUser, clientToken, clientLogout } = useClientAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -233,9 +233,16 @@ export default function ClientOrders() {
     }
     api.getClientOrders(clientToken)
       .then(data => setOrders(data))
-      .catch(err => setError(err.message))
+      .catch(err => {
+        if (err?.status === 401 || err?.message === 'Token inválido o expirado' || err?.message === 'No autorizado. Token requerido.') {
+          clientLogout();
+          navigate('/login', { state: { from: '/mis-pedidos', message: 'Tu sesión expiró. Iniciá sesión nuevamente.' } });
+          return;
+        }
+        setError(err.message);
+      })
       .finally(() => setLoading(false));
-  }, [clientUser, clientToken, navigate]);
+  }, [clientUser, clientToken, navigate, clientLogout]);
 
   if (loading) {
     return (

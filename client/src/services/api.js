@@ -213,7 +213,18 @@ export const api = {
         'Authorization': `Bearer ${token}`
       }
     });
-    if (!res.ok) throw new Error('Error al obtener pedidos');
+    if (!res.ok) {
+      let message = 'Error al obtener pedidos';
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch {
+        // Ignore JSON parse errors and keep the fallback message.
+      }
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
+    }
     return res.json();
   },
 
