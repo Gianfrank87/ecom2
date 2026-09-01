@@ -34,7 +34,7 @@ export default function Hero() {
             <div className="inline-flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 rounded-xl bg-slate-800/80 border border-slate-700 max-w-md">
               <div className="flex items-center gap-2 text-xs font-bold text-amber-300 px-2">
                 <Tag className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Usá el código: <strong className="text-white font-black text-sm bg-slate-900 px-2 py-0.5 rounded border border-slate-600">HUELLITAS10</strong></span>
+                <span>Usá el código: <strong className="text-white font-black text-sm bg-slate-900 px-2 py-0.5 rounded border border-slate-600">Sehola2026</strong></span>
               </div>
               <Link
                 to="/catalog"
@@ -50,7 +50,7 @@ export default function Hero() {
           <div className="lg:col-span-5 relative flex justify-center">
             <div className="relative w-full max-w-xs sm:max-w-sm aspect-4/3 sm:aspect-square flex items-center justify-center">
               <img
-                src="https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=800&auto=format&fit=crop&q=80"
+                src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1788279752/Captura_de_pantalla_2026-09-01_132122_ld94oy.png"
                 alt="Alimentos y mascotas"
                 className="w-full h-full object-cover rounded-xl border-2 border-slate-700 shadow-xl"
               />
