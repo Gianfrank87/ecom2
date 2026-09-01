@@ -687,8 +687,8 @@ app.post('/api/orders', requireClient, async (req, res) => {
       return res.status(400).json({ error: 'El pedido no tiene items' });
     }
 
-    // IMMEDIATE locks the write connection while validation and checkout run.
-    await dbRun('BEGIN IMMEDIATE TRANSACTION');
+    // PostgreSQL transaction syntax.
+    await dbRun('BEGIN');
     transactionStarted = true;
 
     const requestedByProduct = new Map();
