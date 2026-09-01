@@ -661,7 +661,7 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
       SELECT p.*,
         (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id) AS mensajes_count,
         (SELECT COUNT(*) FROM mensajes m WHERE m.pedido_id = p.id AND m.remitente = 'admin' AND m.tipo = 'mensaje' AND m.leido = FALSE) AS mensajes_no_leidos,
-        COALESCE((SELECT m.cerrado FROM mensajes m WHERE m.pedido_id = p.id ORDER BY m.hilo_id DESC, m.id DESC LIMIT 1), 0) AS hilo_cerrado
+        COALESCE((SELECT m.cerrado FROM mensajes m WHERE m.pedido_id = p.id ORDER BY m.hilo_id DESC, m.id DESC LIMIT 1), FALSE) AS hilo_cerrado
       FROM pedidos p
       WHERE cliente_id = ? 
       ORDER BY fecha DESC
