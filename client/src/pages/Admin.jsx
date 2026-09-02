@@ -90,7 +90,7 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
         <label className="label-xs">Categoría</label>
         <select name="category" value={formData.category} onChange={handleChange}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900">
-          {['alimentos','accesorios','higiene','juguetes','salud'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+          {['collares','correas','alimentos','juguetes','consejos'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
         </select>
       </div>
       <div className="grid grid-cols-2 gap-3">

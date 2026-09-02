@@ -7,14 +7,7 @@ import OfertaCard from '../components/OfertaCard';
 import { api } from '../services/api';
 import { Flame, ShieldCheck, Truck, Clock, Award } from 'lucide-react';
 
-const BRANDS = [
-  { name: 'Royal Canin', badge: 'Hasta 30% OFF', color: 'bg-red-600' },
-  { name: 'Purina Pro Plan', badge: 'Hasta 25% OFF', color: 'bg-blue-600' },
-  { name: 'Eukanuba', badge: 'Hasta 20% OFF', color: 'bg-purple-600' },
-  { name: 'Pedigree', badge: 'Hasta 35% OFF', color: 'bg-amber-500' },
-  { name: 'Whiskas', badge: 'Hasta 30% OFF', color: 'bg-pink-600' },
-  { name: 'Vitalcan', badge: 'Hasta 20% OFF', color: 'bg-emerald-600' }
-];
+const BRAND_LOGO = 'https://res.cloudinary.com/dl3t6vykm/image/upload/v1788385805/bcfaf7a1-7667-4d74-86ce-55d31c495037_nwhlov.jpg';
 
 export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -43,36 +36,38 @@ export default function Home() {
       {/* Categories Grid */}
       <FeaturedCategories />
 
-      {/* ─── Brands Grid ("Comprá por tu marca favorita" - Estilo MisPichos / MiVetShop) ─── */}
-      <section className="mb-12 text-left">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-[#e52521]">Marcas Oficiales</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-              Seleccioná tu marca favorita
+      {/* ─── Official Brand ─── */}
+      <section className="mb-12 overflow-hidden rounded-2xl bg-[#0f172a] text-white shadow-sm">
+        <div className="grid min-h-[210px] items-center md:grid-cols-[1fr_1fr]">
+          <div className="px-6 py-8 sm:px-10 sm:py-10">
+            <span className="text-[11px] font-black uppercase tracking-[0.18em] text-[#f5b84d]">
+              Marca oficial
+            </span>
+            <h2 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Nuestra marca oficial: NIGDIZ
             </h2>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          {BRANDS.map((b, idx) => (
+            <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">
+              Diseñada para acompañar cada paseo con seguridad, tecnología y estilo.
+            </p>
             <Link
-              key={idx}
-              to={`/catalog?search=${encodeURIComponent(b.name)}`}
-              className="bg-white rounded-xl border border-gray-200 hover:border-[#e52521] hover:shadow-md transition-all p-4 flex flex-col items-center justify-between text-center group"
+              to="/catalog?search=NIGDIZ"
+              className="mt-5 inline-flex items-center rounded-lg bg-[#e52521] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white transition-colors hover:bg-[#c91d19]"
             >
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-black text-slate-800 text-xs mb-3 group-hover:bg-red-50 group-hover:text-[#e52521] transition-colors">
-                {b.name.charAt(0)}
-              </div>
-              <h3 className="font-extrabold text-xs text-gray-900 group-hover:text-[#e52521] transition-colors line-clamp-1 mb-2">
-                {b.name}
-              </h3>
-              <span className="text-[9px] font-black text-white bg-[#e52521] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
-                <Flame className="w-2.5 h-2.5" />
-                {b.badge}
-              </span>
+              Ver productos NIGDIZ
             </Link>
-          ))}
+          </div>
+
+          <Link
+            to="/catalog?search=NIGDIZ"
+            aria-label="Ver productos de NIGDIZ"
+            className="flex h-full min-h-[210px] items-center justify-center border-t border-white/10 bg-white px-8 py-6 transition-colors hover:bg-slate-50 md:border-l md:border-t-0"
+          >
+            <img
+              src={BRAND_LOGO}
+              alt="Logo de NIGDIZ"
+              className="max-h-36 w-full max-w-sm object-contain"
+            />
+          </Link>
         </div>
       </section>
 

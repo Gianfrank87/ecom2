@@ -2,11 +2,11 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const categories = [
+  { id: 'collares', name: 'Collares', icon: '💡', count: 'Seguridad & Estilo' },
+  { id: 'correas', name: 'Correas', icon: '🦮', count: 'Paseos seguros' },
   { id: 'alimentos', name: 'Alimentos', icon: '🍲', count: 'Perros & Gatos' },
-  { id: 'accesorios', name: 'Accesorios', icon: '🦮', count: 'Collares & Camas' },
-  { id: 'higiene', name: 'Higiene', icon: '🧼', count: 'Shampoos & Arenas' },
-  { id: 'juguetes', name: 'Juguetes', icon: '🎾', count: 'Pelotas & Rascadores' },
-  { id: 'salud', name: 'Salud', icon: '💊', count: 'Cuidado Especial' }
+  { id: 'juguetes', name: 'Juguetes', icon: '🎾', count: 'Diversión & Juego' },
+  { id: 'consejos', name: 'Consejos', icon: '💬', count: 'Cuidado para mascotas' }
 ];
 
 export default function FeaturedCategories() {

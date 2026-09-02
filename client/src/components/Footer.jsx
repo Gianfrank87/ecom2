@@ -13,7 +13,7 @@ export default function Footer() {
                 🐾
               </div>
               <span className="font-extrabold text-lg text-gray-900">
-                Huellitas<span className="text-[#e52521]">&amp;</span>Cía
+                SEHOLA
               </span>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed font-medium">
@@ -45,13 +45,16 @@ export default function Footer() {
                 <Link to="/catalog?category=alimentos" className="text-gray-600 hover:text-[#e52521] transition-colors">Alimentos</Link>
               </li>
               <li>
-                <Link to="/catalog?category=accesorios" className="text-gray-600 hover:text-[#e52521] transition-colors">Accesorios</Link>
+                <Link to="/catalog?category=collares" className="text-gray-600 hover:text-[#e52521] transition-colors">Collares</Link>
               </li>
               <li>
-                <Link to="/catalog?category=higiene" className="text-gray-600 hover:text-[#e52521] transition-colors">Higiene</Link>
+                <Link to="/catalog?category=correas" className="text-gray-600 hover:text-[#e52521] transition-colors">Correas</Link>
               </li>
               <li>
                 <Link to="/catalog?category=juguetes" className="text-gray-600 hover:text-[#e52521] transition-colors">Juguetes</Link>
+              </li>
+              <li>
+                <Link to="/catalog?category=consejos" className="text-gray-600 hover:text-[#e52521] transition-colors">Consejos</Link>
               </li>
             </ul>
           </div>

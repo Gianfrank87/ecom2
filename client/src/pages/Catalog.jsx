@@ -7,11 +7,11 @@ import { api } from '../services/api';
 
 const CATEGORIES = [
   { id: 'todos', name: 'Todos' },
+  { id: 'collares', name: 'Collares' },
+  { id: 'correas', name: 'Correas' },
   { id: 'alimentos', name: 'Alimentos' },
-  { id: 'accesorios', name: 'Accesorios' },
-  { id: 'higiene', name: 'Higiene' },
   { id: 'juguetes', name: 'Juguetes' },
-  { id: 'salud', name: 'Salud' }
+  { id: 'consejos', name: 'Consejos' }
 ];
 
 export default function Catalog() {

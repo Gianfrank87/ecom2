@@ -1,89 +1,285 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Gift, Tag, Award, Sparkles } from 'lucide-react';
+import { ChevronRight, Tag, Sparkles } from 'lucide-react';
 
 export default function Hero() {
-  return (
-    <div className="space-y-4 mb-10 text-left">
-      {/* Main Promo Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-[#0f172a] via-[#1e293b] to-[#0f172a] text-white rounded-2xl p-6 sm:p-10 lg:p-12 border border-slate-800 shadow-md">
-        
-        {/* Subtle Background Pattern Elements */}
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-16 w-64 h-64 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+  const dogImage = 'https://res.cloudinary.com/dl3t6vykm/image/upload/v1788384780/63c2d7ac-6b50-47fd-a123-cab78eea8736_mx9rhk.jpg';
 
-        <div className="grid lg:grid-cols-12 gap-8 items-center relative z-10">
-          
-          {/* Left Column: Text & Coupons */}
-          <div className="lg:col-span-7 space-y-5">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white text-[11px] font-black uppercase tracking-widest shadow-sm">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Por tiempo limitado</span>
+  return (
+    <>
+      <style>{`
+        .hero-shell {
+          position: relative;
+          overflow: hidden;
+          border-radius: 28px;
+          background:
+            linear-gradient(90deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.74) 38%, rgba(0,0,0,0.7) 100%),
+            radial-gradient(circle at 72% 30%, rgba(255,255,255,0.06), transparent 18%),
+            #05090d;
+          border: 1px solid rgba(255,255,255,0.05);
+          box-shadow: 0 18px 40px rgba(0,0,0,0.2);
+          margin-bottom: 1.5rem;
+        }
+
+        .hero-grid {
+          position: relative;
+          z-index: 1;
+          display: grid;
+          grid-template-columns: 1.08fr 0.92fr;
+          min-height: 430px;
+          align-items: center;
+          padding: 1.5rem 2.2rem 1.2rem 2.2rem;
+        }
+
+        .hero-copy {
+          padding-left: 0.2rem;
+        }
+
+        .hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          border-radius: 9999px;
+          background: linear-gradient(180deg, #ef2e2b 0%, #dd1d1a 100%);
+          color: white;
+          padding: 0.7rem 1.2rem;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          font-size: 0.7rem;
+          box-shadow: 0 8px 18px rgba(229, 37, 33, 0.22);
+        }
+
+        .hero-title {
+          margin: 1.2rem 0 0.9rem;
+          font-size: clamp(3.1rem, 3.35vw, 6rem);
+          line-height: 0.86;
+          letter-spacing: -0.08em;
+          font-weight: 900;
+          color: #ffffff;
+          display: flex;
+          flex-direction: column;
+          gap: 0.14em;
+        }
+
+        .hero-title > span {
+          white-space: nowrap;
+        }
+
+        .hero-title .highlight {
+          display: inline;
+          color: #f5b84d;
+        }
+
+        .hero-subtitle {
+          max-width: 34rem;
+          color: rgba(255,255,255,0.78);
+          font-size: 0.97rem;
+          line-height: 1.5;
+          margin: 0 0 1.5rem;
+        }
+
+        .promo-box {
+          display: flex;
+          align-items: center;
+          gap: 0.8rem;
+          flex-wrap: wrap;
+          width: fit-content;
+          padding: 0.75rem 0.8rem 0.75rem 1rem;
+          border-radius: 14px;
+          background: rgba(15, 23, 42, 0.9);
+          border: 1px solid rgba(148,163,184,0.25);
+        }
+
+        .promo-code {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+          font-size: 0.9rem;
+          color: #f8fafc;
+          white-space: nowrap;
+        }
+
+        .promo-code strong {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 7.8rem;
+          height: 2.3rem;
+          border-radius: 0.52rem;
+          background: rgba(21, 31, 50, 0.95);
+          border: 1px solid rgba(148,163,184,0.22);
+          color: #f8fafc;
+          padding: 0 0.7rem;
+          font-weight: 800;
+        }
+
+        .hero-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.42rem;
+          min-height: 3.15rem;
+          padding: 0.9rem 1.4rem;
+          border-radius: 12px;
+          font-size: 0.8rem;
+          font-weight: 900;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          background: linear-gradient(180deg, #ef2d29 0%, #d91818 100%);
+          color: #fff;
+          border: 1px solid rgba(255,255,255,0.12);
+          box-shadow: 0 10px 18px rgba(229, 37, 33, 0.22);
+        }
+
+        .hero-art {
+          position: relative;
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          min-height: 360px;
+          isolation: isolate;
+        }
+
+        .hero-art::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), transparent 22%);
+          z-index: 0;
+        }
+
+        .hero-visual {
+          position: relative;
+          width: min(38rem, 100%);
+          height: 100%;
+          min-height: 26rem;
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          z-index: 1;
+          overflow: visible;
+        }
+
+        .hero-photo {
+          width: 100%;
+          height: 100%;
+          min-height: 26rem;
+          object-fit: contain;
+          object-position: center center;
+          display: block;
+          filter: brightness(0.8) contrast(1.12) saturate(0.8);
+          transform: scale(1.08);
+          mix-blend-mode: normal;
+        }
+
+        @media (max-width: 1030px) {
+          .hero-grid {
+            grid-template-columns: 1fr;
+            padding: 1.5rem 1rem 1.2rem;
+          }
+
+          .hero-copy {
+            text-align: center;
+          }
+
+          .hero-title {
+            align-items: center;
+          }
+
+          .promo-box {
+            margin: 0 auto;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .hero-shell {
+            border-radius: 18px;
+          }
+
+          .hero-badge {
+            letter-spacing: 0.08em;
+            font-size: 0.62rem;
+            padding: 0.45rem 0.8rem;
+          }
+
+          .hero-title {
+            font-size: clamp(3.1rem, 16vw, 5rem);
+          }
+
+          .hero-title > span {
+            white-space: normal;
+          }
+
+          .hero-subtitle {
+            font-size: 0.96rem;
+          }
+
+          .promo-box {
+            width: 100%;
+            padding: 0.7rem 0.75rem;
+          }
+
+          .promo-code {
+            width: 100%;
+            justify-content: center;
+            white-space: normal;
+          }
+
+          .promo-code strong {
+            min-width: 6.5rem;
+          }
+
+          .hero-button {
+            width: 100%;
+          }
+        }
+      `}</style>
+
+      <section className="hero-shell">
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <div className="hero-badge">
+              <Sparkles size={12} />
+              Por tiempo limitado
             </div>
 
-            <h1 className="font-extrabold text-3xl sm:text-4xl lg:text-5xl text-white leading-tight tracking-tight">
-              Alimentos Premium <br className="hidden sm:inline" />
-              <span className="text-amber-400">hasta 35% OFF</span>
+            <h1 className="hero-title">
+              <span>Seguridad que se ve</span>
+              <span>hasta <span className="highlight">35% OFF</span></span>
             </h1>
 
-            <p className="text-sm sm:text-base text-slate-300 font-medium max-w-lg leading-relaxed">
-              Las marcas más elegidas por profesionales veterinarios: Royal Canin, Pro Plan, Eukanuba, Pedigree y más.
+            <p className="hero-subtitle">
+              Collares luminosos para perros: Visibilidad + estilo para cada paseo.
             </p>
 
-            {/* Promo Coupon Box (Estilo MiVetShop) */}
-            <div className="inline-flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 rounded-xl bg-slate-800/80 border border-slate-700 max-w-md">
-              <div className="flex items-center gap-2 text-xs font-bold text-amber-300 px-2">
-                <Tag className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Usá el código: <strong className="text-white font-black text-sm bg-slate-900 px-2 py-0.5 rounded border border-slate-600">Sehola2026</strong></span>
+            <div className="promo-box">
+              <div className="promo-code">
+                <Tag size={16} className="text-[#f5b84d]" />
+                <span>
+                  Usá el código: <strong>Sehola2026</strong>
+                </span>
               </div>
-              <Link
-                to="/catalog"
-                className="px-4 py-2 bg-[#e52521] hover:bg-[#c91d19] text-white font-black text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer"
-              >
-                ¡Comprar ahora!
-                <ChevronRight className="w-4 h-4" />
+
+              <Link to="/catalog" className="hero-button">
+                Comprar ahora
+                <ChevronRight size={16} />
               </Link>
             </div>
           </div>
 
-          {/* Right Column: Real Product Photography Collage */}
-          <div className="lg:col-span-5 relative flex justify-center">
-            <div className="relative w-full max-w-xs sm:max-w-sm aspect-4/3 sm:aspect-square flex items-center justify-center">
+          <div className="hero-art">
+            <div className="hero-visual">
               <img
-                src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1788279752/Captura_de_pantalla_2026-09-01_132122_ld94oy.png"
-                alt="Alimentos y mascotas"
-                className="w-full h-full object-cover rounded-xl border-2 border-slate-700 shadow-xl"
+                className="hero-photo"
+                src={dogImage}
+                alt="Perro con collar luminoso"
               />
-              <div className="absolute -bottom-3 -right-3 bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-lg font-black text-xs uppercase tracking-wider shadow-md flex items-center gap-1.5 border border-amber-300">
-                <Award className="w-4 h-4 text-slate-950" />
-                Envíos a todo el país
-              </div>
             </div>
           </div>
-
         </div>
-      </div>
-
-      {/* Secondary Promo Gift Bar (Estilo MiVetShop bottom banner) */}
-      <div className="bg-[#0f172a] rounded-xl p-4 sm:p-5 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-lime-400 flex items-center justify-center text-slate-950 shrink-0">
-            <Gift className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-black tracking-wider text-lime-400 block">¡Tenés un regalo!</span>
-            <p className="font-extrabold text-sm sm:text-base text-white">
-              $10.000 de descuento en tu primera compra online
-            </p>
-          </div>
-        </div>
-        <Link
-          to="/catalog"
-          className="px-5 py-2.5 bg-lime-400 hover:bg-lime-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap cursor-pointer shadow-sm"
-        >
-          Quiero mi regalo &gt;
-        </Link>
-      </div>
-    </div>
+      </section>
+    </>
   );
 }

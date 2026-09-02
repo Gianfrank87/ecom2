@@ -20,46 +20,6 @@
     "featured": false
   },
   {
-    "id": "3",
-    "name": "Arnés Ergonómico Regulable - Verde Oliva",
-    "category": "accesorios",
-    "price": 18500,
-    "description": "Arnés de pecho acolchado y antitirones para paseos cómodos. Confeccionado en nylon de alta resistencia, detalles reflectantes para la noche y hebillas de seguridad.",
-    "image": "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 10,
-    "featured": true
-  },
-  {
-    "id": "4",
-    "name": "Cama Ortopédica Memory Foam - Soft Brown",
-    "category": "accesorios",
-    "price": 38000,
-    "description": "Brinda el máximo descanso a las articulaciones de tu mascota. Rellena de espuma viscoelástica premium y cubierta de corderito desenfundable y lavable.",
-    "image": "https://images.unsplash.com/photo-1541599540903-216a46ca1ad0?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 6,
-    "featured": true
-  },
-  {
-    "id": "5",
-    "name": "Shampoo Hipoalergénico de Avena y Coco",
-    "category": "higiene",
-    "price": 6800,
-    "description": "Fórmula suave con extracto de avena orgánica y aceite de coco para calmar y nutrir pieles sensibles o con picazón. Deja una fragancia dulce y duradera.",
-    "image": "https://images.unsplash.com/photo-1516734212186-a967f81ad0d7?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 25,
-    "featured": false
-  },
-  {
-    "id": "6",
-    "name": "Cepillo Quita Pelo Muerto Profesional",
-    "category": "higiene",
-    "price": 9500,
-    "description": "Reduce la caída del pelo hasta en un 90%. Sus finas cerdas de acero inoxidable penetran sin dañar la piel para retirar todo el subpelo suelto de manera eficiente.",
-    "image": "https://images.unsplash.com/photo-1628009368231-7bb7cfcb0def?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 18,
-    "featured": true
-  },
-  {
     "id": "7",
     "name": "Juguete Interactivo Dispensador de Premios",
     "category": "juguetes",
@@ -80,26 +40,6 @@
     "featured": true
   },
   {
-    "id": "9",
-    "name": "Suplemento de Vitaminas y Condroprotectores",
-    "category": "salud",
-    "price": 14200,
-    "description": "Fórmula avanzada con glucosamina, condroitina y MSM. Ideal para prevenir el desgaste articular en perros de razas grandes y mascotas de edad avanzada.",
-    "image": "https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 30,
-    "featured": false
-  },
-  {
-    "id": "10",
-    "name": "Limpiador Auricular Herbal Antiséptico",
-    "category": "salud",
-    "price": 5400,
-    "description": "Gotas suaves formuladas con extracto de caléndula y árbol de té para limpiar el exceso de cera y prevenir otitis e infecciones fúngicas.",
-    "image": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 15,
-    "featured": false
-  },
-  {
     "id": "11",
     "name": "Pelota de Goma Ultra Resistente Flotante",
     "category": "juguetes",
@@ -108,15 +48,5 @@
     "image": "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
     "stock": 35,
     "featured": true
-  },
-  {
-    "id": "12",
-    "name": "Comedero de Cerámica con Soporte de Madera",
-    "category": "accesorios",
-    "price": 12500,
-    "description": "Comedero elevado premium que favorece una postura saludable al comer. Plato de cerámica pesada higiénico y lavable en lavavajillas.",
-    "image": "https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3",
-    "stock": 12,
-    "featured": false
   }
 ]

@@ -25,8 +25,7 @@ export default function ProductCard({ product }) {
   const getVariantChips = (category) => {
     const cat = category?.toLowerCase();
     if (cat === 'alimentos') return ['1.5kg', '3kg', '7.5kg', '15kg'];
-    if (cat === 'higiene' || cat === 'salud') return ['250ml', '500ml'];
-    if (cat === 'accesorios') return ['Talle S', 'Talle M', 'Talle L'];
+    if (cat === 'collares' || cat === 'correas') return ['Talle S', 'Talle M', 'Talle L'];
     return ['1 unidad', 'Pack x2'];
   };
 

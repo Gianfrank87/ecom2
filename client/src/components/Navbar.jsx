@@ -184,10 +184,10 @@ export default function Navbar() {
             </div>
             <div className="flex flex-col text-left">
               <span className="font-extrabold text-xl tracking-tight text-gray-900 leading-none">
-                Huellitas<span className="text-[#e52521]">&amp;</span>Cía
+                SEHOLA
               </span>
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">
-                Pet Shop &amp; Mascotas
+                Innovación, diseño &amp; Cuidado
               </span>
             </div>
           </Link>
