@@ -18,6 +18,18 @@ const STATUS_CONFIG = {
     classes: 'bg-amber-50 text-amber-600 border-amber-200',
     dot: 'bg-amber-400'
   },
+  pendiente_pago: {
+    label: 'Pendiente de pago',
+    icon: Clock,
+    classes: 'bg-amber-50 text-amber-600 border-amber-200',
+    dot: 'bg-amber-400'
+  },
+  aprobado: {
+    label: 'Pago aprobado',
+    icon: CheckCircle,
+    classes: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    dot: 'bg-emerald-500'
+  },
   esperando_aprobacion: {
     label: 'Esperando comprobante',
     icon: Clock,
@@ -48,7 +60,9 @@ function OrderStepper({ status }) {
   const steps = ['Pedido realizado', 'Pago aprobado', 'Enviado', 'Completado'];
   const activeIndex = {
     esperando_aprobacion: 0,
+    pendiente_pago: 0,
     pago_rechazado: 0,
+    aprobado: 1,
     pendiente: 1,
     enviado: 2,
     completado: 3

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { MercadoPagoConfig, Preference, Payment, WebhookSignatureValidator } from 'mercadopago';
 
 dotenv.config();
 
@@ -30,7 +30,7 @@ if (MP_ACCESS_TOKEN) {
   mpClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
 }
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
-const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado']);
+const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado']);
 const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = path.join(serverDirectory, 'uploads', 'comprobantes');
@@ -972,9 +972,15 @@ app.post('/api/orders', requireClient, async (req, res) => {
         updatedProducts.push(product);
       }
 
+      const initialStatus = paymentMethod === 'transferencia'
+        ? 'esperando_aprobacion'
+        : paymentMethod === 'mercadopago'
+          ? 'pendiente_pago'
+          : 'pendiente';
+
       const orderResult = await transaction.run(
         'INSERT INTO pedidos (cliente_id, total, estado, metodo_pago, recargo_aplicado) VALUES (?, ?, ?, ?, ?) RETURNING id',
-        [req.user.id, chargedTotal, paymentMethod === 'transferencia' ? 'esperando_aprobacion' : 'pendiente', paymentMethod, surcharge]
+        [req.user.id, chargedTotal, initialStatus, paymentMethod, surcharge]
       );
       const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
 
@@ -1055,6 +1061,54 @@ app.post('/api/orders', requireClient, async (req, res) => {
       });
     }
     internalError(res);
+  }
+});
+
+// POST /api/webhooks/mercadopago (Public webhook from Mercado Pago)
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  try {
+    const secret = process.env.MP_WEBHOOK_SECRET;
+    const xSignature = req.headers['x-signature'];
+    const xRequestId = req.headers['x-request-id'];
+    const dataId = req.query['data.id'] || req.query.id || req.body?.data?.id || req.body?.id;
+
+    if (secret) {
+      try {
+        WebhookSignatureValidator.validate({
+          xSignature,
+          xRequestId,
+          dataId: String(dataId || ''),
+          secret
+        });
+      } catch (validationError) {
+        console.error('Firma de webhook de Mercado Pago inválida:', validationError.message);
+        return res.status(401).json({ error: 'Firma de webhook inválida.' });
+      }
+    } else {
+      console.warn('⚠️ MP_WEBHOOK_SECRET no está configurado. Se omite la validación de firma en desarrollo.');
+    }
+
+    const type = req.query.type || req.query.topic || req.body?.type || req.body?.action;
+
+    if ((type === 'payment' || req.body?.action?.startsWith('payment.')) && dataId && mpClient) {
+      const payment = new Payment(mpClient);
+      const paymentData = await payment.get({ id: dataId });
+
+      if (paymentData && paymentData.status === 'approved') {
+        const orderId = paymentData.external_reference;
+        if (orderId) {
+          await dbRun(
+            "UPDATE pedidos SET estado = 'aprobado' WHERE id = ? AND estado IN ('pendiente_pago', 'pendiente')",
+            [orderId]
+          );
+        }
+      }
+    }
+
+    res.status(200).send('OK');
+  } catch (err) {
+    console.error('Error procesando webhook de Mercado Pago:', err);
+    res.status(200).send('OK');
   }
 });
 

@@ -1304,7 +1304,9 @@ export default function Admin() {
                         }`}
                       >
                         <option value="pendiente">Pendiente</option>
+                        <option value="pendiente_pago">Pendiente de pago</option>
                         <option value="esperando_aprobacion">Esperando comprobante</option>
+                        <option value="aprobado">Pago Aprobado (MP)</option>
                         <option value="pago_rechazado">Pago rechazado</option>
                         <option value="enviado">Enviado</option>
                         <option value="completado">Completado</option>

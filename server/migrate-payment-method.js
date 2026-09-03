@@ -38,6 +38,8 @@ const migrate = async () => {
         IF estado_type IS NOT NULL THEN
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''esperando_aprobacion''', estado_type);
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_rechazado''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pendiente_pago''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''aprobado''', estado_type);
         ELSE
           FOR estado_constraint IN
             SELECT conname
@@ -50,7 +52,7 @@ const migrate = async () => {
           END LOOP;
           ALTER TABLE pedidos
             ADD CONSTRAINT pedidos_estado_check
-            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado'));
+            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado'));
         END IF;
       END $$;
     `);

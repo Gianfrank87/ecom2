@@ -12,6 +12,7 @@ export default function Cart() {
   const navigate = useNavigate();
   
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [apiError, setApiError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('transferencia');
   const [bankConfig, setBankConfig] = useState(null);
@@ -100,6 +101,7 @@ export default function Cart() {
       const res = await api.createOrder(orderData, clientToken);
       
       if (paymentMethod === 'mercadopago' && res.init_point) {
+        setIsRedirecting(true);
         clearCart();
         window.location.href = res.init_point;
         return;
@@ -112,6 +114,7 @@ export default function Cart() {
         clearCart();
       }, 100);
     } catch (err) {
+      setIsRedirecting(false);
       if (err.productId !== undefined && err.available !== undefined) {
         updateItemStock(String(err.productId), Number(err.available));
         setApiError(`Solo quedan ${err.available} unidades de ${err.productName || 'este producto'}. Ajustamos el carrito para que puedas intentarlo de nuevo.`);
@@ -473,10 +476,10 @@ export default function Cart() {
                 </button>
                 <button
                   type="submit"
-                  disabled={checkoutLoading}
-                  className="w-2/3 py-3 rounded-lg bg-[#e52521] hover:bg-[#c91d19] disabled:bg-gray-300 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center cursor-pointer"
+                  disabled={checkoutLoading || isRedirecting}
+                  className="w-2/3 py-3 rounded-lg bg-[#e52521] hover:bg-[#c91d19] disabled:bg-gray-300 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
                 >
-                  {checkoutLoading ? 'Procesando...' : 'Finalizar Compra'}
+                  {isRedirecting ? 'Redirigiendo a Mercado Pago...' : checkoutLoading ? 'Procesando...' : 'Finalizar Compra'}
                 </button>
               </div>
             </form>

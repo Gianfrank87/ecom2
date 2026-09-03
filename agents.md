@@ -224,17 +224,17 @@
 - La migración se ejecuta explícitamente con `npm run migrate:payments` desde `server`; no se ejecuta automáticamente al iniciar el servidor.
 - Los comprobantes requieren ejecutar nuevamente la misma migración para agregar `comprobante_url` y los estados de aprobación.
 
-## ✅ Fase 5 - Integración SDK Mercado Pago (Preferencias de Pago)
+## ✅ Fase 5 - Integración SDK Mercado Pago, Webhook y UX
 
 - Se instaló `mercadopago` (SDK v2) como dependencia del backend.
 - El cliente se inicializa con `MP_ACCESS_TOKEN` del entorno; si la variable no existe, el servidor arranca pero rechaza pedidos con método `mercadopago`.
-- `POST /api/orders` ahora devuelve `{ orderId, init_point, message }` cuando el método es `mercadopago`.
-- Los items de la preferencia se construyen a partir de los precios recalculados por el backend (nunca del frontend). El recargo se incluye como un item adicional con `id: 'RECARGO'` para que el total del link cuadre con el total almacenado en la base.
-- Se usa `external_reference: String(orderId)` para vincular la preferencia al pedido interno (necesario para el webhook).
-- Se genera una clave de idempotencia única por request (`crypto.randomUUID()`) que se pasa al SDK vía `requestOptions.idempotencyKey`.
+- `POST /api/orders` asigna el estado inicial `pendiente_pago` cuando el método es `mercadopago` (`esperando_aprobacion` para transferencia, `pendiente` para efectivo) y devuelve `{ orderId, init_point, message }`.
+- Los items de la preferencia se construyen a partir de los precios recalculados por el backend (nunca del frontend). El recargo se incluye como un item adicional con `id: 'RECARGO'`.
+- Se usa `external_reference: String(orderId)` y clave de idempotencia única por request (`crypto.randomUUID()`).
 - Las `back_urls` (success/failure/pending) apuntan a `${CLIENT_URL}/mis-pedidos` con `auto_return: 'approved'`.
-- En el frontend, `Cart.jsx` detecta `init_point` en la respuesta, limpia el carrito y redirige al usuario con `window.location.href`.
-- **Variables de entorno requeridas en Render**: `MP_ACCESS_TOKEN` (Access Token de la aplicación de MercadoPago) y `CLIENT_URL` (URL pública del frontend, ej. `https://ecomlau-mauve.vercel.app`).
+- **Frontend (Cart.jsx)**: Al hacer click en "Finalizar Compra" con Mercado Pago, el botón muestra `"Redirigiendo a Mercado Pago..."` y se inhabilita para prevenir dobles clics hasta que se ejecuta `window.location.href`.
+- **Webhook (`POST /api/webhooks/mercadopago`)**: Endpoint público que procesa notificaciones de pago. Si `MP_WEBHOOK_SECRET` está configurado, valida la firma criptográfica del header `x-signature` mediante `WebhookSignatureValidator.validate()`. Al recibir un pago con estado `approved`, busca el pedido por `external_reference` y actualiza su estado de `pendiente_pago` a `aprobado`.
+- **Variables de entorno en Render**: `MP_ACCESS_TOKEN`, `CLIENT_URL` y opcionalmente `MP_WEBHOOK_SECRET` (para validar la firma criptográfica en producción).
 
 ---
 
@@ -242,6 +242,5 @@
 
 A implementar en la próxima fase:
 
-- **Webhook de Mercado Pago**: Crear endpoint `POST /api/webhooks/mercadopago` (público, sin auth JWT) que reciba notificaciones IPN/webhook de pagos aprobados. Debe verificar la firma criptográfica de los headers (`x-signature`) contra el `MP_WEBHOOK_SECRET` del entorno antes de cambiar el estado del pedido. Al recibir un pago aprobado, buscar el pedido por `external_reference` y actualizar su estado a `pendiente` (pago confirmado).
-- **Estado del pedido post-pago MP**: Definir si los pedidos pagados con MercadoPago entran directamente en `pendiente` (listo para enviar) o en un estado intermedio.
+- **Configuración de Webhook en MercadoPago**: Configurar el URL del Webhook en el Dashboard de Mercado Pago (`https://tu-backend.onrender.com/api/webhooks/mercadopago`) registrando eventos de pago.
 - **Email de confirmación de registro**: Pendiente de configurar servicio de mail (ej. Resend, Nodemailer + SMTP).
