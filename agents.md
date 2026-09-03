@@ -1,7 +1,7 @@
 # AGENTS.MD - Estado del Proyecto Huellitas & Cía
 
 ## 📌 Resumen General
-**Huellitas & Cía** es una aplicación web de e-commerce de pet shop desarrollada con React (Vite) en el frontend y Node.js + Express + SQLite en el backend. 
+**Huellitas & Cía** es una aplicación web de e-commerce de pet shop desarrollada con React (Vite) en el frontend y Node.js + Express + PostgreSQL en el backend.
 
 ---
 
@@ -25,7 +25,7 @@
 
 ---
 
-## 🗄️ Estructura de la Base de Datos (SQLite / MySQL Compatible)
+## 🗄️ Estructura de la Base de Datos (PostgreSQL)
 
 1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
 2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
@@ -40,7 +40,7 @@
 ## 🔑 Credenciales y Autenticación
 
 - **Login único**: clientes y administradores ingresan desde `/login` mediante `POST /api/clients/login`.
-- **Superusuario de pruebas**: usuario `Admin`, contraseña `Admin`, email interno `admin@huellitas.local`, `rol = admin`.
+- **Superusuario de pruebas**: cuenta administrativa interna con `rol = admin`; sus credenciales no se documentan ni se guardan en el repositorio.
 - **Usuarios nuevos**: se crean con `rol = cliente` por defecto.
 - **Sesión frontend**: JWT persistido en `huellitas_client_token`; el campo `user.role` determina si se muestra el acceso al panel.
 - **Autorización admin**: los endpoints administrativos validan el JWT y requieren `role = admin`.
@@ -175,6 +175,15 @@
 - Agregar una clave de idempotencia por intento de checkout y verificar la firma de cualquier webhook de la pasarela antes de cambiar estados o registrar pagos.
 - Mantener `JWT_SECRET` y `DATABASE_URL` únicamente como secretos del entorno; nunca commitear `.env`, valores reales ni secretos en bundles.
 - Antes de producción configurar HTTPS, CORS con orígenes explícitos, rate limiting distribuido si hay varias instancias, logs sin datos sensibles y backups protegidos.
+
+## ✅ Estado de seguridad previo a pagos
+
+- `JWT_SECRET` fuerte configurado en el entorno local y en Render; no forma parte del repositorio.
+- `.env` está ignorado por Git y no aparece trackeado ni en el historial de ramas actuales.
+- El checkout usa una única conexión transaccional y descuento atómico de stock.
+- Login y registro tienen rate limiting, y el backend no expone errores internos.
+- La contraseña fija del frontend fue eliminada; el acceso de entornos no públicos debe protegerse desde la plataforma.
+- El sistema de pagos todavía requiere idempotencia, comprobantes privados y validación segura de archivos antes de habilitarlo.
 
 ---
 
