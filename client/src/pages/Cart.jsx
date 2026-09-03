@@ -98,6 +98,13 @@ export default function Cart() {
         shippingInfo: formData
       };
       const res = await api.createOrder(orderData, clientToken);
+      
+      if (paymentMethod === 'mercadopago' && res.init_point) {
+        clearCart();
+        window.location.href = res.init_point;
+        return;
+      }
+
       setSimulatedOrderNumber(res.orderId);
       setCheckoutStep('success');
       

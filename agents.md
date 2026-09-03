@@ -19,6 +19,7 @@
   - Express.js (Puerto `5000`)
   - CORS habilitado
   - PostgreSQL mediante `pg` y `DATABASE_URL`
+  - `mercadopago` SDK v2 (generación de preferencias de pago)
 - **Servidores Dev**:
   - Frontend: `http://localhost:5173/`
   - Backend: `http://localhost:5000/`
@@ -82,7 +83,7 @@
 - `DELETE /api/offers/:id` -> **Protegido Admin**
 
 ### Pedidos
-- `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos, aplica `total_base / 0.934` para MercadoPago, registra `recargo_aplicado`, inserta `pedido_items` y descuenta stock en una única transacción -> Resp: `{ orderId, message }`
+- `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos, aplica `total_base / 0.934` para MercadoPago, registra `recargo_aplicado`, inserta `pedido_items` y descuenta stock en una única transacción. Si `metodo_pago` es `mercadopago`, genera una Preferencia de Pago vía SDK con clave de idempotencia (`crypto.randomUUID()`) y devuelve el `init_point` -> Resp: `{ orderId, init_point, message }`
 - `POST /api/orders/:id/comprobante` -> **Protegido Cliente propietario** -> Recibe multipart con campo `comprobante`; acepta JPEG/PNG/PDF, máximo 5 MB, valida firma binaria y deja el pedido en `esperando_aprobacion`.
 - `GET /api/orders/:id/comprobante` -> **Protegido Cliente propietario o Admin** -> Sirve el archivo privado sólo después de validar autorización.
 - `PATCH /api/admin/orders/:id/approval` -> **Protegido Admin** -> Body `{ decision: 'approved' | 'rejected' }`; deja el pedido en `pendiente` o `pago_rechazado`.
@@ -174,6 +175,7 @@
 
 31. ~~**Endurecimiento previo a pagos**: Se eliminó el fallback conocido de `JWT_SECRET`; el backend no inicia sin un secreto de al menos 32 caracteres. Se agregó rate limiting a login/registro, se dejaron de exponer errores internos, el endpoint público ya no devuelve productos inactivos y los productos validan límites y URLs HTTPS.~~ (Completado)
 32. ~~**Retiro del production gate inseguro**: Se eliminó la contraseña fija del bundle del frontend. La protección de un entorno no público debe configurarse en la plataforma de despliegue o en el servidor.~~ (Completado)
+33. ~~**Integración SDK Mercado Pago (Preferencias de Pago)**: Se instaló el paquete `mercadopago` en el backend. Se inicializa `MercadoPagoConfig` con `MP_ACCESS_TOKEN` del entorno. `POST /api/orders` genera una Preferencia de Pago cuando `metodo_pago === 'mercadopago'`, incluyendo los items del pedido con precios recalculados, el recargo como item separado, `external_reference` con el `orderId` y una clave de idempotencia por request. El frontend (`Cart.jsx`) redirige al `init_point` devuelto por la API y limpia el carrito antes de la redirección. Las `back_urls` apuntan a `/mis-pedidos` usando `CLIENT_URL` del entorno.~~ (Completado)
 
 ## 🔐 Reglas de seguridad para implementar pagos
 
@@ -191,7 +193,8 @@
 - El checkout usa una única conexión transaccional y descuento atómico de stock.
 - Login y registro tienen rate limiting, y el backend no expone errores internos.
 - La contraseña fija del frontend fue eliminada; el acceso de entornos no públicos debe protegerse desde la plataforma.
-- El sistema de pagos todavía requiere idempotencia, comprobantes privados y validación segura de archivos antes de habilitarlo.
+- La idempotencia de preferencias de MercadoPago se resolvió mediante `crypto.randomUUID()` en cada request al SDK.
+- Falta implementar el webhook de MercadoPago (`POST /api/webhooks/mercadopago`) con verificación criptográfica de firma para confirmar pagos automáticamente.
 - Los comprobantes se guardan en `server/uploads/comprobantes`, se excluyen de Git y no deben servirse como archivos estáticos.
 - El almacenamiento local de Render es efímero; antes de producción los comprobantes deben migrarse a almacenamiento privado persistente (por ejemplo, bucket privado con URLs temporales).
 
@@ -221,12 +224,24 @@
 - La migración se ejecuta explícitamente con `npm run migrate:payments` desde `server`; no se ejecuta automáticamente al iniciar el servidor.
 - Los comprobantes requieren ejecutar nuevamente la misma migración para agregar `comprobante_url` y los estados de aprobación.
 
-## 🔜 Siguiente Bloque Grande: Sistema de Pagos
+## ✅ Fase 5 - Integración SDK Mercado Pago (Preferencias de Pago)
+
+- Se instaló `mercadopago` (SDK v2) como dependencia del backend.
+- El cliente se inicializa con `MP_ACCESS_TOKEN` del entorno; si la variable no existe, el servidor arranca pero rechaza pedidos con método `mercadopago`.
+- `POST /api/orders` ahora devuelve `{ orderId, init_point, message }` cuando el método es `mercadopago`.
+- Los items de la preferencia se construyen a partir de los precios recalculados por el backend (nunca del frontend). El recargo se incluye como un item adicional con `id: 'RECARGO'` para que el total del link cuadre con el total almacenado en la base.
+- Se usa `external_reference: String(orderId)` para vincular la preferencia al pedido interno (necesario para el webhook).
+- Se genera una clave de idempotencia única por request (`crypto.randomUUID()`) que se pasa al SDK vía `requestOptions.idempotencyKey`.
+- Las `back_urls` (success/failure/pending) apuntan a `${CLIENT_URL}/mis-pedidos` con `auto_return: 'approved'`.
+- En el frontend, `Cart.jsx` detecta `init_point` en la respuesta, limpia el carrito y redirige al usuario con `window.location.href`.
+- **Variables de entorno requeridas en Render**: `MP_ACCESS_TOKEN` (Access Token de la aplicación de MercadoPago) y `CLIENT_URL` (URL pública del frontend, ej. `https://ecomlau-mauve.vercel.app`).
+
+---
+
+## 🔜 Próximos Pasos Pendientes
 
 A implementar en la próxima fase:
 
-- **Precios por producto/oferta**: completar los precios específicos por método si se necesitan descuentos distintos a la lista base.
-- **Flujo transferencia**: mostrar alias bancario al cliente, permitir subir comprobante (imagen/PDF), pedido queda en estado `esperando_aprobacion`.
-- **Admin - Revisión de comprobantes**: nueva pestaña para ver comprobantes subidos y aprobar/rechazar el pago manualmente.
-- **Cliente - Seguimiento del pedido**: vista de pasos estilo stepper (Pedido realizado → Comprobante subido → Pago aprobado → Enviado → Completado).
-- **Email de confirmación de registro**: pendiente de configurar servicio de mail (ej. Resend, Nodemailer + SMTP).
+- **Webhook de Mercado Pago**: Crear endpoint `POST /api/webhooks/mercadopago` (público, sin auth JWT) que reciba notificaciones IPN/webhook de pagos aprobados. Debe verificar la firma criptográfica de los headers (`x-signature`) contra el `MP_WEBHOOK_SECRET` del entorno antes de cambiar el estado del pedido. Al recibir un pago aprobado, buscar el pedido por `external_reference` y actualizar su estado a `pendiente` (pago confirmado).
+- **Estado del pedido post-pago MP**: Definir si los pedidos pagados con MercadoPago entran directamente en `pendiente` (listo para enviar) o en un estado intermedio.
+- **Email de confirmación de registro**: Pendiente de configurar servicio de mail (ej. Resend, Nodemailer + SMTP).

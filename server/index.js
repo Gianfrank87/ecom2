@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 dotenv.config();
 
@@ -23,6 +24,11 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 
 const signingSecret = JWT_SECRET;
 const MERCADOPAGO_NET_FACTOR = 0.934;
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
+let mpClient;
+if (MP_ACCESS_TOKEN) {
+  mpClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
+}
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
 const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado']);
 const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
@@ -925,7 +931,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
     if (!PAYMENT_METHODS.has(paymentMethod)) {
       return res.status(400).json({ error: 'Método de pago inválido.' });
     }
-    const orderId = await withTransaction(async (transaction) => {
+    const { orderId, trustedOrder, surcharge } = await withTransaction(async (transaction) => {
       const trustedOrder = await getTrustedOrderLines(items, transaction);
       const baseTotalCents = Math.round(trustedOrder.total * 100);
       const chargedTotalCents = paymentMethod === 'mercadopago'
@@ -985,10 +991,58 @@ app.post('/api/orders', requireClient, async (req, res) => {
         }
       }
 
-      return pedidoId;
+      return { orderId: pedidoId, trustedOrder, surcharge };
     });
+
+    let init_point = null;
+    if (paymentMethod === 'mercadopago') {
+      if (!mpClient) {
+        throw Object.assign(new Error('Mercado Pago no está configurado en el servidor.'), { status: 500 });
+      }
+      
+      const preference = new Preference(mpClient);
+      const host = process.env.CLIENT_URL || 'http://localhost:5173';
+      
+      const preferenceItems = trustedOrder.lines.map(line => ({
+        id: String(line.productId),
+        title: line.productName,
+        quantity: line.quantity,
+        unit_price: line.unitPrice,
+        currency_id: 'ARS'
+      }));
+
+      if (surcharge > 0) {
+        preferenceItems.push({
+          id: 'RECARGO',
+          title: 'Recargo por pago con Mercado Pago',
+          quantity: 1,
+          unit_price: surcharge,
+          currency_id: 'ARS'
+        });
+      }
+
+      const idempotencyKey = crypto.randomUUID();
+
+      const prefResult = await preference.create({
+        body: {
+          items: preferenceItems,
+          external_reference: String(orderId),
+          back_urls: {
+            success: `${host}/mis-pedidos`,
+            failure: `${host}/mis-pedidos`,
+            pending: `${host}/mis-pedidos`
+          },
+          auto_return: 'approved'
+        },
+        requestOptions: { idempotencyKey }
+      });
+      
+      init_point = prefResult.init_point;
+    }
+
     res.status(201).json({
       orderId,
+      init_point,
       message: 'Pedido creado exitosamente' 
     });
   } catch (err) {
