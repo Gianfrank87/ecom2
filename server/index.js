@@ -63,7 +63,10 @@ const isValidImageUrl = (value) => {
     return false;
   }
 };
-const internalError = (res) => res.status(500).json({ error: 'Error interno del servidor.' });
+const internalError = (res, err) => {
+  if (err) console.error('Error interno del servidor:', err);
+  return res.status(500).json({ error: 'Error interno del servidor.' });
+};
 const allowedCategories = new Set(['collares', 'correas', 'alimentos', 'juguetes', 'consejos']);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -1060,7 +1063,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
         productName: err.productName
       });
     }
-    internalError(res);
+    internalError(res, err);
   }
 });
 
@@ -1207,6 +1210,49 @@ app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
 // ─────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────
+const ensureDatabaseSchema = async () => {
+  try {
+    await dbRun(`
+      DO $$
+      DECLARE
+        estado_constraint TEXT;
+        estado_type TEXT;
+      BEGIN
+        SELECT t.typname INTO estado_type
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_type t ON t.oid = a.atttypid
+        WHERE c.relname = 'pedidos' AND a.attname = 'estado' AND t.typtype = 'e';
+        
+        IF estado_type IS NOT NULL THEN
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''esperando_aprobacion''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_rechazado''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pendiente_pago''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''aprobado''', estado_type);
+        ELSE
+          FOR estado_constraint IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'pedidos'::regclass
+              AND contype = 'c'
+              AND pg_get_constraintdef(oid) ILIKE '%estado%'
+          LOOP
+            EXECUTE format('ALTER TABLE pedidos DROP CONSTRAINT %I', estado_constraint);
+          END LOOP;
+          ALTER TABLE pedidos
+            ADD CONSTRAINT pedidos_estado_check
+            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado'));
+        END IF;
+      END $$;
+    `);
+    console.log('✅ Esquema de base de datos de pedidos sincronizado.');
+  } catch (err) {
+    console.warn('⚠️ No se pudo sincronizar el esquema de pedidos en startup:', err.message);
+  }
+};
+
+ensureDatabaseSchema();
+
 app.listen(PORT, () => {
   console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
 });
