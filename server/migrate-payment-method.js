@@ -21,7 +21,24 @@ const migrate = async () => {
     await client.query(`
       ALTER TABLE pedidos
         ADD COLUMN IF NOT EXISTS metodo_pago metodo_pago_enum NOT NULL DEFAULT 'transferencia',
-        ADD COLUMN IF NOT EXISTS recargo_aplicado NUMERIC(12, 2) NOT NULL DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS recargo_aplicado NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS comprobante_url TEXT;
+    `);
+    await client.query(`
+      DO $$
+      DECLARE
+        estado_type TEXT;
+      BEGIN
+        SELECT t.typname INTO estado_type
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_type t ON t.oid = a.atttypid
+        WHERE c.relname = 'pedidos' AND a.attname = 'estado' AND t.typtype = 'e';
+        IF estado_type IS NOT NULL THEN
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''esperando_aprobacion''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_rechazado''', estado_type);
+        END IF;
+      END $$;
     `);
     await client.query(`
       DO $$

@@ -132,6 +132,25 @@ export const api = {
     return res.json();
   },
 
+  getBankConfig: async () => {
+    const res = await fetch(`${API_URL}/config/banco`);
+    if (!res.ok) throw new Error('Error al obtener los datos bancarios');
+    return res.json();
+  },
+
+  updateBankConfig: async (config) => {
+    const res = await fetch(`${API_URL}/admin/config/banco`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(config)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al guardar los datos bancarios');
+    }
+    return res.json();
+  },
+
   // ─── Client Auth ───
   clientRegister: async (name, email, password) => {
     const res = await fetch(`${API_URL}/clients/register`, {
@@ -202,6 +221,45 @@ export const api = {
       error.available = data.available;
       error.productName = data.productName;
       throw error;
+    }
+    return res.json();
+  },
+
+  uploadOrderReceipt: async (orderId, file, token) => {
+    const body = new FormData();
+    body.append('comprobante', file);
+    const res = await fetch(`${API_URL}/orders/${orderId}/comprobante`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al subir el comprobante');
+    }
+    return res.json();
+  },
+
+  downloadOrderReceipt: async (orderId) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/comprobante`, {
+      headers: { 'Authorization': `Bearer ${getSessionToken()}` }
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al descargar el comprobante');
+    }
+    return res.blob();
+  },
+
+  approveOrderPayment: async (orderId, decision) => {
+    const res = await fetch(`${API_URL}/admin/orders/${orderId}/approval`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ decision })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al actualizar la aprobación del pago');
     }
     return res.json();
   },

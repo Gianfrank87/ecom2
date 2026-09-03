@@ -474,6 +474,117 @@ function AdminMessageThread({ thread, onClose, onSent }) {
   );
 }
 
+function BankConfigForm({ showFeedback }) {
+  const [form, setForm] = useState({ alias: '', cbu: '', titular: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.getBankConfig()
+      .then((config) => setForm(config))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await api.updateBankConfig(form);
+      showFeedback('Datos bancarios guardados.');
+    } catch (error) {
+      showFeedback(error.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Cargando configuración bancaria...</p>;
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
+      <p className="text-xs text-gray-500 font-semibold">Estos datos se mostrarán a los clientes que elijan transferencia.</p>
+      {error && <p className="text-xs font-bold text-red-700">{error}</p>}
+      {[
+        ['alias', 'Alias bancario', 'Ej: huellitas.cia'],
+        ['cbu', 'CBU', 'Ej: 0000000000000000000000'],
+        ['titular', 'Titular', 'Nombre del titular de la cuenta']
+      ].map(([name, label, placeholder]) => (
+        <div key={name}>
+          <label htmlFor={`bank-${name}`} className="label-xs">{label}</label>
+          <input
+            id={`bank-${name}`}
+            name={name}
+            value={form[name]}
+            onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}
+            maxLength={name === 'titular' ? 160 : 100}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900"
+          />
+        </div>
+      ))}
+      <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0f172a] px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white hover:bg-[#1e293b] disabled:opacity-50 cursor-pointer">
+        {saving ? 'Guardando...' : 'Guardar datos bancarios'}
+      </button>
+    </form>
+  );
+}
+
+function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
+  const [loading, setLoading] = useState(false);
+
+  const downloadReceipt = async () => {
+    try {
+      const blob = await api.downloadOrderReceipt(order.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `comprobante-pedido-${order.id}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      onFeedback(error.message, 'error');
+    }
+  };
+
+  const handleDecision = async (decision) => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      await api.approveOrderPayment(order.id, decision);
+      onFeedback(decision === 'approved' ? 'Pago aprobado.' : 'Pago rechazado.');
+      onUpdated();
+    } catch (error) {
+      onFeedback(error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-extrabold text-gray-900">Pedido #{order.id}</p>
+        <p className="text-xs text-gray-600 mt-1">{order.cliente_nombre} · {order.cliente_email}</p>
+        <p className="text-xs font-black text-gray-900 mt-1">{formatPrice(order.total)}</p>
+      </div>
+      <div className="flex flex-wrap gap-2 sm:justify-end">
+        <button type="button" onClick={downloadReceipt} className="inline-flex items-center gap-1.5 rounded-lg border border-[#0f172a] bg-[#0f172a] px-3 py-2 text-xs font-extrabold text-white hover:bg-[#1e293b] cursor-pointer">
+          <FileText className="w-3.5 h-3.5" /> Ver / descargar
+        </button>
+        <button type="button" onClick={() => handleDecision('approved')} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
+          <CheckCircle className="w-3.5 h-3.5" /> Aprobar Pago
+        </button>
+        <button type="button" onClick={() => handleDecision('rejected')} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 hover:bg-red-100 disabled:opacity-50 cursor-pointer">
+          <XCircle className="w-3.5 h-3.5" /> Rechazar Pago
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { isAdmin, clientUser, clientLogout, authLoading } = useClientAuth();
   const location = useLocation();
@@ -662,7 +773,8 @@ export default function Admin() {
     );
   }
 
-  const pendingOrdersCount = orders.filter(o => o.estado === 'pendiente').length;
+  const pendingOrdersCount = orders.filter(o => !['enviado', 'completado'].includes(o.estado)).length;
+  const pendingReceiptOrders = orders.filter(o => o.metodo_pago === 'transferencia' && o.estado === 'esperando_aprobacion' && o.comprobante_url);
   const unreadMessagesCount = messages.reduce((total, thread) => total + thread.no_leidos, 0);
   const stockDeactivatedOffers = offers.filter(o => o.desactivada_por_stock);
 
@@ -794,6 +906,12 @@ export default function Admin() {
               {unreadMessagesCount}
             </span>
           )}
+        </button>
+        <button onClick={() => handleTabChange('config')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
+            activeTab === 'config' ? 'bg-[#0f172a] text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100 font-bold'
+          }`}>
+          <FileText className="w-4 h-4" /> Configuración
         </button>
       </div>
 
@@ -1033,11 +1151,22 @@ export default function Admin() {
 
       {activeTab === 'sales' && (() => {
         const filteredOrders = orders.filter(o =>
-          salesView === 'pending' ? o.estado === 'pendiente' : o.estado !== 'pendiente'
+          salesView === 'pending' ? !['enviado', 'completado'].includes(o.estado) : ['enviado', 'completado'].includes(o.estado)
         );
 
         return (
           <div className="space-y-4 text-left">
+            {salesView === 'pending' && pendingReceiptOrders.length > 0 && (
+              <div className="space-y-3">
+                <div>
+                  <h2 className="font-extrabold text-base text-gray-900">Comprobantes pendientes de revisión</h2>
+                  <p className="text-xs text-gray-500 font-semibold mt-1">Validá el comprobante antes de aprobar el pago.</p>
+                </div>
+                {pendingReceiptOrders.map(order => (
+                  <ReceiptReviewCard key={order.id} order={order} onFeedback={showFeedback} onUpdated={refreshOrders} />
+                ))}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <h2 className="font-extrabold text-base text-gray-900">
                 Historial de Ventas
@@ -1139,6 +1268,8 @@ export default function Admin() {
                         }`}
                       >
                         <option value="pendiente">Pendiente</option>
+                        <option value="esperando_aprobacion">Esperando comprobante</option>
+                        <option value="pago_rechazado">Pago rechazado</option>
                         <option value="enviado">Enviado</option>
                         <option value="completado">Completado</option>
                       </select>
@@ -1185,6 +1316,13 @@ export default function Admin() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'config' && (
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs text-left">
+          <h2 className="font-extrabold text-base text-gray-900 mb-1">Datos bancarios</h2>
+          <BankConfigForm showFeedback={showFeedback} />
         </div>
       )}
 

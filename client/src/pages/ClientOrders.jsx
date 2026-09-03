@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
 import { Package, Clock, CheckCircle, Truck, AlertCircle, ChevronDown, ChevronUp, MessageCircle, Send, X } from 'lucide-react';
+import ReceiptUpload from '../components/ReceiptUpload';
 
 const formatPrice = (value) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value);
@@ -17,6 +18,18 @@ const STATUS_CONFIG = {
     classes: 'bg-amber-50 text-amber-600 border-amber-200',
     dot: 'bg-amber-400'
   },
+  esperando_aprobacion: {
+    label: 'Esperando comprobante',
+    icon: Clock,
+    classes: 'bg-amber-50 text-amber-700 border-amber-200',
+    dot: 'bg-amber-500'
+  },
+  pago_rechazado: {
+    label: 'Pago rechazado',
+    icon: AlertCircle,
+    classes: 'bg-red-50 text-red-700 border-red-200',
+    dot: 'bg-red-500'
+  },
   enviado: {
     label: 'Enviado',
     icon: Truck,
@@ -30,6 +43,40 @@ const STATUS_CONFIG = {
     dot: 'bg-sage-400'
   }
 };
+
+function OrderStepper({ status }) {
+  const steps = ['Pedido realizado', 'Pago aprobado', 'Enviado', 'Completado'];
+  const activeIndex = {
+    esperando_aprobacion: 0,
+    pago_rechazado: 0,
+    pendiente: 1,
+    enviado: 2,
+    completado: 3
+  }[status] ?? 0;
+  const rejected = status === 'pago_rechazado';
+
+  return (
+    <div className="px-5 pb-4">
+      <div className="flex items-start">
+        {steps.map((step, index) => (
+          <React.Fragment key={step}>
+            <div className="flex min-w-0 flex-1 flex-col items-center text-center">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-black ${
+                index <= activeIndex ? rejected && index === 1 ? 'border-red-500 bg-red-50 text-red-700' : 'border-[#e52521] bg-[#e52521] text-white' : 'border-gray-200 bg-white text-gray-400'
+              }`}>
+                {index < activeIndex ? '✓' : index + 1}
+              </span>
+              <span className={`mt-1.5 text-[9px] font-bold leading-tight ${index <= activeIndex ? 'text-gray-700' : 'text-gray-400'}`}>{step}</span>
+            </div>
+            {index < steps.length - 1 && <div className={`mt-3 h-0.5 flex-1 ${index < activeIndex ? 'bg-[#e52521]' : 'bg-gray-200'}`} />}
+          </React.Fragment>
+        ))}
+      </div>
+      {status === 'esperando_aprobacion' && <p className="mt-3 text-center text-[11px] font-bold text-amber-700">Subí tu comprobante para que podamos verificar el pago.</p>}
+      {rejected && <p className="mt-3 text-center text-[11px] font-bold text-red-700">El comprobante fue rechazado. Podés cargar uno nuevo.</p>}
+    </div>
+  );
+}
 
 function MessageThread({ order, onClose }) {
   const [messages, setMessages] = useState([]);
@@ -138,10 +185,9 @@ function MessageThread({ order, onClose }) {
   );
 }
 
-function OrderCard({ order, onContact }) {
+function OrderCard({ order, token, onContact, onReceiptUpdated }) {
   const [expanded, setExpanded] = useState(false);
   const status = STATUS_CONFIG[order.estado] || STATUS_CONFIG.pendiente;
-  const StatusIcon = status.icon;
 
   return (
     <div className="bg-white border border-accent-100 rounded-2xl shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md">
@@ -183,6 +229,20 @@ function OrderCard({ order, onContact }) {
           </button>
         </div>
       </div>
+
+      <OrderStepper status={order.estado} />
+
+      {order.metodo_pago === 'transferencia' && (Boolean(order.comprobante_url) || ['esperando_aprobacion', 'pago_rechazado'].includes(order.estado)) && (
+        <div className="px-5 pb-5">
+          <ReceiptUpload
+            orderId={order.id}
+            token={token}
+            hasReceipt={Boolean(order.comprobante_url)}
+            allowUpload={['esperando_aprobacion', 'pago_rechazado'].includes(order.estado)}
+            onUploaded={onReceiptUpdated}
+          />
+        </div>
+      )}
 
       {/* Expandable items */}
       {expanded && (
@@ -290,7 +350,13 @@ export default function ClientOrders() {
             {orders.length} pedido{orders.length !== 1 ? 's' : ''} realizados
           </p>
           {orders.map(order => (
-            <OrderCard key={order.id} order={order} onContact={setContactOrder} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              token={clientToken}
+              onContact={setContactOrder}
+              onReceiptUpdated={() => api.getClientOrders(clientToken).then(setOrders).catch(() => {})}
+            />
           ))}
         </div>
       )}

@@ -1,9 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
 
 dotenv.config();
@@ -19,6 +24,28 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 const signingSecret = JWT_SECRET;
 const MERCADOPAGO_NET_FACTOR = 0.934;
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
+const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado']);
+const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
+const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDirectory = path.join(serverDirectory, 'uploads', 'comprobantes');
+fs.mkdirSync(uploadsDirectory, { recursive: true });
+
+const allowedReceiptTypes = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+const receiptUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => callback(null, uploadsDirectory),
+    filename: (_req, file, callback) => {
+      const extension = file.mimetype === 'application/pdf'
+        ? '.pdf'
+        : file.mimetype === 'image/png' ? '.png' : '.jpg';
+      callback(null, `${crypto.randomUUID()}${extension}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    callback(null, allowedReceiptTypes.has(file.mimetype));
+  },
+});
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isValidImageUrl = (value) => {
@@ -40,6 +67,28 @@ const authLimiter = rateLimit({
   message: { error: 'Demasiados intentos. Probá nuevamente más tarde.' },
 });
 
+const hasValidReceiptSignature = async (file) => {
+  const handle = await fs.promises.open(file.path, 'r');
+  try {
+    const header = Buffer.alloc(8);
+    await handle.read(header, 0, header.length, 0);
+    if (file.mimetype === 'application/pdf') return header.subarray(0, 5).toString() === '%PDF-';
+    if (file.mimetype === 'image/png') return header.equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  } finally {
+    await handle.close();
+  }
+};
+
+const removeUploadedFile = async (fileName) => {
+  if (!fileName) return;
+  const safeName = path.basename(fileName);
+  if (safeName !== fileName) return;
+  try { await fs.promises.unlink(path.join(uploadsDirectory, safeName)); } catch (error) {
+    if (error.code !== 'ENOENT') console.error('No se pudo eliminar el comprobante anterior.');
+  }
+};
+
 app.disable('x-powered-by');
 
 // Enable CORS and JSON parsing
@@ -58,6 +107,15 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '1mb' }));
+
+const getBankConfig = async (query = { all: dbAll }) => {
+  const rows = await query.all(
+    'SELECT clave, valor FROM configuraciones WHERE clave IN (?, ?, ?)',
+    BANK_CONFIG_KEYS
+  );
+  const values = Object.fromEntries(rows.map((row) => [row.clave, row.valor]));
+  return { alias: values.banco_alias || '', cbu: values.banco_cbu || '', titular: values.banco_titular || '' };
+};
 
 // Middleware: require an authenticated user with the admin role
 const requireAdmin = (req, res, next) => {
@@ -480,6 +538,39 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
+// GET /api/config/banco (public)
+app.get('/api/config/banco', async (req, res) => {
+  try {
+    res.json(await getBankConfig());
+  } catch (error) {
+    internalError(res);
+  }
+});
+
+// PUT /api/admin/config/banco (admin only)
+app.put('/api/admin/config/banco', requireAdmin, async (req, res) => {
+  try {
+    const alias = String(req.body?.alias || '').trim();
+    const cbu = String(req.body?.cbu || '').trim();
+    const titular = String(req.body?.titular || '').trim();
+    if (alias.length > 100 || cbu.length > 100 || titular.length > 160) {
+      return res.status(400).json({ error: 'Los datos bancarios superan la longitud permitida.' });
+    }
+    await withTransaction(async (transaction) => {
+      for (const [key, value] of [['banco_alias', alias], ['banco_cbu', cbu], ['banco_titular', titular]]) {
+        await transaction.run(
+          `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
+           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+          [key, value]
+        );
+      }
+    });
+    res.json({ alias, cbu, titular });
+  } catch (error) {
+    internalError(res);
+  }
+});
+
 // ─────────────────────────────────────────
 // OFFERS
 // ─────────────────────────────────────────
@@ -608,7 +699,7 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
 app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   try {
     const { estado } = req.body;
-    if (!['pendiente', 'enviado', 'completado'].includes(estado)) {
+    if (!ORDER_STATUSES.has(estado)) {
       return res.status(400).json({ error: 'Estado inválido' });
     }
     
@@ -877,7 +968,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
 
       const orderResult = await transaction.run(
         'INSERT INTO pedidos (cliente_id, total, estado, metodo_pago, recargo_aplicado) VALUES (?, ?, ?, ?, ?) RETURNING id',
-        [req.user.id, chargedTotal, 'pendiente', paymentMethod, surcharge]
+        [req.user.id, chargedTotal, paymentMethod === 'transferencia' ? 'esperando_aprobacion' : 'pendiente', paymentMethod, surcharge]
       );
       const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
 
@@ -909,6 +1000,98 @@ app.post('/api/orders', requireClient, async (req, res) => {
         productName: err.productName
       });
     }
+    internalError(res);
+  }
+});
+
+const runReceiptUpload = (req, res, next) => receiptUpload.single('comprobante')(req, res, (error) => {
+  if (!error) return next();
+  if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'El comprobante no puede superar los 5 MB.' });
+  }
+  return res.status(400).json({ error: 'El comprobante debe ser una imagen JPEG/PNG o un PDF.' });
+});
+
+// POST /api/orders/:id/comprobante (protected owner)
+app.post('/api/orders/:id/comprobante', requireClient, runReceiptUpload, async (req, res) => {
+  try {
+    if (req.user.role === 'admin') return res.status(403).json({ error: 'Sólo el cliente puede subir comprobantes.' });
+    const order = await dbGet(
+      'SELECT id, cliente_id, metodo_pago, estado, comprobante_url FROM pedidos WHERE id = ?',
+      [req.params.id]
+    );
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    if (String(order.cliente_id) !== String(req.user.id)) return res.status(403).json({ error: 'No tenés permiso para este pedido.' });
+    if (order.metodo_pago !== 'transferencia') return res.status(409).json({ error: 'Este pedido no requiere comprobante de transferencia.' });
+    if (!['esperando_aprobacion', 'pago_rechazado'].includes(order.estado)) {
+      return res.status(409).json({ error: 'Este pedido ya no admite cambios en el comprobante.' });
+    }
+    if (!req.file) return res.status(400).json({ error: 'Debés adjuntar un comprobante.' });
+
+    const validSignature = await hasValidReceiptSignature(req.file);
+    if (!validSignature) {
+      await removeUploadedFile(req.file.filename);
+      return res.status(400).json({ error: 'El contenido del archivo no coincide con su tipo.' });
+    }
+
+    await dbRun(
+      `UPDATE pedidos SET comprobante_url = ?, estado = 'esperando_aprobacion'
+       WHERE id = ? AND cliente_id = ? AND metodo_pago = 'transferencia'`,
+      [req.file.filename, req.params.id, req.user.id]
+    );
+    if (order.comprobante_url) await removeUploadedFile(order.comprobante_url);
+    res.status(201).json({ message: 'Comprobante recibido.', estado: 'esperando_aprobacion' });
+  } catch (error) {
+    if (req.file) await removeUploadedFile(req.file.filename);
+    internalError(res);
+  }
+});
+
+// GET /api/orders/:id/comprobante (protected owner or admin)
+app.get('/api/orders/:id/comprobante', requireClient, async (req, res) => {
+  try {
+    const order = await dbGet(
+      'SELECT id, cliente_id, comprobante_url FROM pedidos WHERE id = ?',
+      [req.params.id]
+    );
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    if (req.user.role !== 'admin' && String(order.cliente_id) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'No tenés permiso para este pedido.' });
+    }
+    if (!order.comprobante_url) return res.status(404).json({ error: 'Este pedido no tiene comprobante.' });
+    const fileName = path.basename(order.comprobante_url);
+    if (fileName !== order.comprobante_url) return res.status(404).json({ error: 'Comprobante no encontrado.' });
+    const filePath = path.join(uploadsDirectory, fileName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Comprobante no encontrado.' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.sendFile(filePath, { dotfiles: 'deny' }, (error) => {
+      if (error && !res.headersSent) internalError(res);
+    });
+  } catch (error) {
+    internalError(res);
+  }
+});
+
+// PATCH /api/admin/orders/:id/approval (admin only)
+app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
+  try {
+    const decision = req.body?.decision;
+    if (!['approved', 'rejected'].includes(decision)) {
+      return res.status(400).json({ error: 'La decisión debe ser approved o rejected.' });
+    }
+    const order = await dbGet(
+      'SELECT id, metodo_pago, comprobante_url, estado FROM pedidos WHERE id = ?',
+      [req.params.id]
+    );
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    if (order.metodo_pago !== 'transferencia' || !order.comprobante_url) {
+      return res.status(409).json({ error: 'El pedido no tiene un comprobante de transferencia.' });
+    }
+    const estado = decision === 'approved' ? 'pendiente' : 'pago_rechazado';
+    await dbRun('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, req.params.id]);
+    res.json({ message: decision === 'approved' ? 'Pago aprobado.' : 'Pago rechazado.', estado });
+  } catch (error) {
     internalError(res);
   }
 });

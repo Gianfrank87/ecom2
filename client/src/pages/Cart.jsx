@@ -4,6 +4,7 @@ import { Trash2, Plus, Minus, ArrowLeft, CheckCircle2, AlertCircle } from 'lucid
 import { useCart } from '../context/CartContext';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
+import ReceiptUpload from '../components/ReceiptUpload';
 
 export default function Cart() {
   const { cart, updateQuantity, updateItemStock, removeFromCart, clearCart, getCartTotal } = useCart();
@@ -13,6 +14,9 @@ export default function Cart() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('transferencia');
+  const [bankConfig, setBankConfig] = useState(null);
+  const [bankConfigLoading, setBankConfigLoading] = useState(false);
+  const [bankConfigError, setBankConfigError] = useState('');
   
   // Checkout Form State
   const [formData, setFormData] = useState({
@@ -36,6 +40,15 @@ export default function Cart() {
       }));
     }
   }, [clientUser]);
+
+  useEffect(() => {
+    if (paymentMethod !== 'transferencia' || bankConfig) return;
+    setBankConfigLoading(true);
+    api.getBankConfig()
+      .then(setBankConfig)
+      .catch((error) => setBankConfigError(error.message))
+      .finally(() => setBankConfigLoading(false));
+  }, [paymentMethod, bankConfig]);
 
   // Helper to format currency
   const formatPrice = (value) => {
@@ -121,7 +134,7 @@ export default function Cart() {
               ¡Pedido recibido con éxito!
             </h1>
             <p className="text-sm text-gray-500 max-w-md mx-auto">
-              Muchas gracias por comprar en Huellitas & Cía. Tu pedido ha sido procesado exitosamente.
+              Muchas gracias por comprar en Huellitas & Cía. {paymentMethod === 'transferencia' ? 'Completá el pago y subí tu comprobante para que podamos revisarlo.' : 'Tu pedido ha sido procesado exitosamente.'}
             </p>
           </div>
 
@@ -142,6 +155,24 @@ export default function Cart() {
               </p>
             )}
           </div>
+
+          {paymentMethod === 'transferencia' && (
+            <div className="space-y-4 text-left">
+              <div className="rounded-xl border border-[#0f172a]/15 bg-slate-50 p-4 space-y-2">
+                <h2 className="text-sm font-extrabold text-[#0f172a]">Datos para transferir</h2>
+                {bankConfigLoading && <p className="text-xs text-gray-500">Cargando datos bancarios...</p>}
+                {bankConfigError && <p className="text-xs font-bold text-red-700">{bankConfigError}</p>}
+                {bankConfig && (
+                  <>
+                    <p className="text-xs text-gray-700"><strong>Alias:</strong> {bankConfig.alias || 'No configurado'}</p>
+                    <p className="text-xs text-gray-700"><strong>CBU:</strong> {bankConfig.cbu || 'No configurado'}</p>
+                    <p className="text-xs text-gray-700"><strong>Titular:</strong> {bankConfig.titular || 'No configurado'}</p>
+                  </>
+                )}
+              </div>
+              <ReceiptUpload orderId={simulatedOrderNumber} token={clientToken} />
+            </div>
+          )}
 
           <div className="pt-4 flex flex-col sm:flex-row gap-4 justify-center">
             <Link

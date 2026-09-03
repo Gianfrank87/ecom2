@@ -30,10 +30,11 @@
 1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
 2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
 3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `rol` (`cliente` | `admin`), `fecha_registro`
-4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `enviado` | `completado`), `metodo_pago` (`transferencia` | `efectivo` | `mercadopago`), `recargo_aplicado`
+4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `esperando_aprobacion` | `pago_rechazado` | `enviado` | `completado`), `metodo_pago` (`transferencia` | `efectivo` | `mercadopago`), `recargo_aplicado`, `comprobante_url` (privada)
 5. **`pedido_items`**: `id` (PK AUTO), `pedido_id`, `producto_id`, `oferta_id` (nullable), `cantidad`, `precio_unitario`
 6. **`mensajes`**: `id` (PK AUTO), `pedido_id`, `remitente` (`cliente` | `admin`), `contenido`, `fecha`, `leido`, `hilo_id`, `tipo` (`mensaje` | `sistema`), `cerrado`
 7. **`ofertas`**: `id` (PK AUTO), `nombre`, `producto_ids` (JSON Array), `descuento_o_precio_paquete`, `tipo_descuento` (`'precio_paquete'` | `'porcentaje'`), `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`
+8. **`configuraciones`**: `clave` (PK), `valor`; contiene `banco_alias`, `banco_cbu` y `banco_titular`
 
 ---
 
@@ -82,9 +83,16 @@
 
 ### Pedidos
 - `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos, aplica `total_base / 0.934` para MercadoPago, registra `recargo_aplicado`, inserta `pedido_items` y descuenta stock en una única transacción -> Resp: `{ orderId, message }`
+- `POST /api/orders/:id/comprobante` -> **Protegido Cliente propietario** -> Recibe multipart con campo `comprobante`; acepta JPEG/PNG/PDF, máximo 5 MB, valida firma binaria y deja el pedido en `esperando_aprobacion`.
+- `GET /api/orders/:id/comprobante` -> **Protegido Cliente propietario o Admin** -> Sirve el archivo privado sólo después de validar autorización.
+- `PATCH /api/admin/orders/:id/approval` -> **Protegido Admin** -> Body `{ decision: 'approved' | 'rejected' }`; deja el pedido en `pendiente` o `pago_rechazado`.
 - `GET /api/orders` -> **Protegido Admin** -> Lista todos los pedidos con datos de cliente e items
 - `PATCH /api/orders/:id/status` -> **Protegido Admin** -> Cambia estado del pedido
 - `GET /api/messages` -> **Protegido Admin** -> Lista hilos agrupados por pedido con `no_leidos` para la bandeja del panel
+
+### Configuración bancaria
+- `GET /api/config/banco` -> Público -> Devuelve alias, CBU y titular configurados.
+- `PUT /api/admin/config/banco` -> **Protegido Admin** -> Body `{ alias, cbu, titular }`; actualiza la configuración bancaria en una única transacción.
 
 ---
 
@@ -184,6 +192,24 @@
 - Login y registro tienen rate limiting, y el backend no expone errores internos.
 - La contraseña fija del frontend fue eliminada; el acceso de entornos no públicos debe protegerse desde la plataforma.
 - El sistema de pagos todavía requiere idempotencia, comprobantes privados y validación segura de archivos antes de habilitarlo.
+- Los comprobantes se guardan en `server/uploads/comprobantes`, se excluyen de Git y no deben servirse como archivos estáticos.
+- El almacenamiento local de Render es efímero; antes de producción los comprobantes deben migrarse a almacenamiento privado persistente (por ejemplo, bucket privado con URLs temporales).
+
+## ✅ Fase 3 - Frontend de transferencias y seguimiento
+
+- El carrito muestra datos bancarios configurables mediante `VITE_TRANSFER_ALIAS`, `VITE_TRANSFER_CBU` y `VITE_TRANSFER_HOLDER`, y permite cargar el comprobante después de crear una transferencia.
+- `ClientOrders.jsx` muestra el stepper del pedido, permite cargar/corregir comprobantes rechazados y descarga comprobantes mediante el endpoint autenticado.
+- `Admin.jsx` muestra comprobantes pendientes de revisión y permite descargarlos, aprobarlos o rechazarlos.
+- Los valores `VITE_TRANSFER_*` son datos públicos de cobro; no deben contener secretos ni credenciales de plataforma.
+
+## ✅ Fase 4 - Configuración bancaria dinámica
+
+- La tabla `configuraciones` almacena `banco_alias`, `banco_cbu` y `banco_titular`; se inicializa con `server/migrate-bank-config.js`.
+- El comando `npm run migrate:bank-config` debe ejecutarse explícitamente contra Supabase y no forma parte del arranque de Render.
+- `GET /api/config/banco` es público para que el carrito pueda mostrar los datos vigentes.
+- `PUT /api/admin/config/banco` requiere admin y actualiza los tres valores en una única transacción.
+- El carrito ya no usa `VITE_TRANSFER_*`; consulta la configuración bancaria desde la API.
+- Los datos bancarios son públicos para los compradores, pero nunca deben incluir credenciales, tokens o secretos de infraestructura.
 
 ---
 
@@ -193,6 +219,7 @@
 - El checkout recalcula el total base en el backend y aplica el factor neto `0.934` para MercadoPago, registrando el recargo en centavos monetarios.
 - El carrito permite seleccionar Transferencia/Efectivo o MercadoPago y muestra el total actualizado en tiempo real.
 - La migración se ejecuta explícitamente con `npm run migrate:payments` desde `server`; no se ejecuta automáticamente al iniciar el servidor.
+- Los comprobantes requieren ejecutar nuevamente la misma migración para agregar `comprobante_url` y los estados de aprobación.
 
 ## 🔜 Siguiente Bloque Grande: Sistema de Pagos
 
