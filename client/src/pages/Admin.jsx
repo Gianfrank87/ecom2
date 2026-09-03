@@ -20,6 +20,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
 
+const formatPrice = (value) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value ?? 0);
+
 // ─────────────── PRODUCT FORM ───────────────
 function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
   const EMPTY = { name: '', category: 'alimentos', price: '', description: '', image: '', stock: '', featured: false };
@@ -293,7 +296,7 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback, onSto
 }
 
 // ─────────────── SORTABLE ITEM COMPONENT ───────────────
-function SortableProductRow({ p, onEdit, onDelete, onStockChange, formatPrice, isDragDisabled }) {
+function SortableProductRow({ p, onEdit, onDelete, onStockChange, isDragDisabled }) {
   const {
     attributes,
     listeners,
@@ -645,17 +648,19 @@ export default function Admin() {
     setTimeout(() => setIsShakingOffer(false), 450);
   };
 
-  const formatPrice = (v) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(v);
-
   const showFeedback = (message, type = 'success') => {
     setFeedback({ message, type });
     setTimeout(() => setFeedback(null), 3500);
   };
 
-  const refreshProducts = () => api.getProducts().then(setProducts).catch(console.error);
-  const refreshOffers = () => api.getAllOffers().then(setOffers).catch(console.error);
-  const refreshOrders = () => api.getOrders().then(setOrders).catch(console.error);
-  const refreshMessages = () => api.getAdminMessages().then(setMessages).catch(console.error);
+  const refreshProducts = () =>
+    api.getProducts().then(setProducts).catch((err) => { console.error(err); setProducts([]); });
+  const refreshOffers = () =>
+    api.getAllOffers().then(setOffers).catch((err) => { console.error(err); setOffers([]); });
+  const refreshOrders = () =>
+    api.getOrders().then(setOrders).catch((err) => { console.error(err); setOrders([]); });
+  const refreshMessages = () =>
+    api.getAdminMessages().then(setMessages).catch((err) => { console.error(err); setMessages([]); });
 
   useEffect(() => {
     if (isAdmin) {
@@ -702,7 +707,7 @@ export default function Admin() {
   };
 
   const handleToggleOffer = (offer) => {
-    const unavailableProducts = offer.products.filter(p => p.stock <= 0);
+    const unavailableProducts = (offer.products ?? []).filter(p => p.stock <= 0);
     if (!offer.activa && (offer.desactivada_por_stock || unavailableProducts.length > 0)) {
       setStockWarning({
         products: unavailableProducts.length > 0
@@ -775,7 +780,7 @@ export default function Admin() {
 
   const pendingOrdersCount = orders.filter(o => !['enviado', 'completado'].includes(o.estado)).length;
   const pendingReceiptOrders = orders.filter(o => o.metodo_pago === 'transferencia' && o.estado === 'esperando_aprobacion' && o.comprobante_url);
-  const unreadMessagesCount = messages.reduce((total, thread) => total + thread.no_leidos, 0);
+  const unreadMessagesCount = messages.reduce((total, thread) => total + (thread.no_leidos ?? 0), 0);
   const stockDeactivatedOffers = offers.filter(o => o.desactivada_por_stock);
 
   return (
@@ -1012,7 +1017,6 @@ export default function Admin() {
                             onEdit={triggerEditProduct}
                             onDelete={handleDeleteProduct}
                             onStockChange={handleStockChange}
-                            formatPrice={formatPrice}
                             isDragDisabled={isDragDisabled}
                           />
                         ))}
@@ -1093,20 +1097,20 @@ export default function Admin() {
                       {o.activa ? '🔥 ACTIVA' : 'Inactiva'}
                     </span>
                     <span className="text-[10px] text-gray-500 font-extrabold">Prioridad: {o.prioridad}</span>
-                    {o.products.some(p => p.stock <= 0) && (
+                    {(o.products ?? []).some(p => p.stock <= 0) && (
                       <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
                         ⚠️ Stock irregular
                       </span>
                     )}
                   </div>
                   <h3 className="font-extrabold text-sm text-gray-900">{o.nombre}</h3>
-                  {o.products.some(p => p.stock <= 0) && (
+                  {(o.products ?? []).some(p => p.stock <= 0) && (
                     <p className="text-[11px] text-amber-800 font-bold mt-1">
-                      Sin stock: {o.products.filter(p => p.stock <= 0).map(p => p.name).join(', ')}
+                      Sin stock: {(o.products ?? []).filter(p => p.stock <= 0).map(p => p.name).join(', ')}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {o.products.map(p => (
+                    {(o.products ?? []).map(p => (
                       <div key={p.id} className="flex items-center gap-1 bg-gray-50 rounded-md px-2 py-1 border border-gray-200">
                         <img src={p.image} alt={p.name} className="w-5 h-5 rounded object-contain" />
                         <span className="text-[10px] text-gray-700 font-bold line-clamp-1 max-w-[80px]">{p.name}</span>
@@ -1310,8 +1314,8 @@ export default function Admin() {
                     </div>
                     <MessageCircle className="w-5 h-5 text-gray-300 shrink-0" />
                   </div>
-                  <p className="text-sm text-gray-700 mt-3 line-clamp-2">{thread.mensajes[thread.mensajes.length - 1]?.contenido}</p>
-                  <p className="text-[10px] text-gray-400 font-bold mt-2">{thread.mensajes.length} mensaje{thread.mensajes.length !== 1 ? 's' : ''}</p>
+                  <p className="text-sm text-gray-700 mt-3 line-clamp-2">{thread.mensajes?.[thread.mensajes.length - 1]?.contenido}</p>
+                  <p className="text-[10px] text-gray-400 font-bold mt-2">{thread.mensajes?.length ?? 0} mensaje{(thread.mensajes?.length ?? 0) !== 1 ? 's' : ''}</p>
                 </button>
               ))}
             </div>

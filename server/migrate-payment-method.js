@@ -27,6 +27,7 @@ const migrate = async () => {
     await client.query(`
       DO $$
       DECLARE
+        estado_constraint TEXT;
         estado_type TEXT;
       BEGIN
         SELECT t.typname INTO estado_type
@@ -37,6 +38,19 @@ const migrate = async () => {
         IF estado_type IS NOT NULL THEN
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''esperando_aprobacion''', estado_type);
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_rechazado''', estado_type);
+        ELSE
+          FOR estado_constraint IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'pedidos'::regclass
+              AND contype = 'c'
+              AND pg_get_constraintdef(oid) ILIKE '%estado%'
+          LOOP
+            EXECUTE format('ALTER TABLE pedidos DROP CONSTRAINT %I', estado_constraint);
+          END LOOP;
+          ALTER TABLE pedidos
+            ADD CONSTRAINT pedidos_estado_check
+            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado'));
         END IF;
       END $$;
     `);
