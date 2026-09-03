@@ -30,7 +30,7 @@
 1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
 2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
 3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `rol` (`cliente` | `admin`), `fecha_registro`
-4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `enviado` | `completado`)
+4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `enviado` | `completado`), `metodo_pago` (`transferencia` | `efectivo` | `mercadopago`), `recargo_aplicado`
 5. **`pedido_items`**: `id` (PK AUTO), `pedido_id`, `producto_id`, `oferta_id` (nullable), `cantidad`, `precio_unitario`
 6. **`mensajes`**: `id` (PK AUTO), `pedido_id`, `remitente` (`cliente` | `admin`), `contenido`, `fecha`, `leido`, `hilo_id`, `tipo` (`mensaje` | `sistema`), `cerrado`
 7. **`ofertas`**: `id` (PK AUTO), `nombre`, `producto_ids` (JSON Array), `descuento_o_precio_paquete`, `tipo_descuento` (`'precio_paquete'` | `'porcentaje'`), `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`
@@ -81,7 +81,7 @@
 - `DELETE /api/offers/:id` -> **Protegido Admin**
 
 ### Pedidos
-- `POST /api/orders` -> **Protegido Cliente** -> Crea pedido, inserta `pedido_items` con `oferta_id` opcional y descuenta stock -> Resp: `{ orderId, message }`
+- `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos, aplica `total_base / 0.934` para MercadoPago, registra `recargo_aplicado`, inserta `pedido_items` y descuenta stock en una única transacción -> Resp: `{ orderId, message }`
 - `GET /api/orders` -> **Protegido Admin** -> Lista todos los pedidos con datos de cliente e items
 - `PATCH /api/orders/:id/status` -> **Protegido Admin** -> Cambia estado del pedido
 - `GET /api/messages` -> **Protegido Admin** -> Lista hilos agrupados por pedido con `no_leidos` para la bandeja del panel
@@ -187,11 +187,18 @@
 
 ---
 
+## ✅ Fase 1 - Cimientos del sistema de pagos
+
+- Se agregó el ENUM `metodo_pago_enum` y las columnas `pedidos.metodo_pago` y `pedidos.recargo_aplicado` mediante `server/migrate-payment-method.js`.
+- El checkout recalcula el total base en el backend y aplica el factor neto `0.934` para MercadoPago, registrando el recargo en centavos monetarios.
+- El carrito permite seleccionar Transferencia/Efectivo o MercadoPago y muestra el total actualizado en tiempo real.
+- La migración se ejecuta explícitamente con `npm run migrate:payments` desde `server`; no se ejecuta automáticamente al iniciar el servidor.
+
 ## 🔜 Siguiente Bloque Grande: Sistema de Pagos
 
-A implementar en la próxima sesión con prompt dedicated:
+A implementar en la próxima fase:
 
-- **Dos precios por producto/oferta**: precio con transferencia (con descuento) vs precio con QR/efectivo (precio completo). Requiere nuevos campos en `productos` y `ofertas`.
+- **Precios por producto/oferta**: completar los precios específicos por método si se necesitan descuentos distintos a la lista base.
 - **Flujo transferencia**: mostrar alias bancario al cliente, permitir subir comprobante (imagen/PDF), pedido queda en estado `esperando_aprobacion`.
 - **Admin - Revisión de comprobantes**: nueva pestaña para ver comprobantes subidos y aprobar/rechazar el pago manualmente.
 - **Cliente - Seguimiento del pedido**: vista de pasos estilo stepper (Pedido realizado → Comprobante subido → Pago aprobado → Enviado → Completado).

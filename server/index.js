@@ -17,6 +17,8 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 }
 
 const signingSecret = JWT_SECRET;
+const MERCADOPAGO_NET_FACTOR = 0.934;
+const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isValidImageUrl = (value) => {
@@ -828,9 +830,19 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
 // POST /api/orders (protected client)
 app.post('/api/orders', requireClient, async (req, res) => {
   try {
-    const { items } = req.body;
+    const { items, metodo_pago: paymentMethod } = req.body;
+    if (!PAYMENT_METHODS.has(paymentMethod)) {
+      return res.status(400).json({ error: 'Método de pago inválido.' });
+    }
     const orderId = await withTransaction(async (transaction) => {
       const trustedOrder = await getTrustedOrderLines(items, transaction);
+      const baseTotalCents = Math.round(trustedOrder.total * 100);
+      const chargedTotalCents = paymentMethod === 'mercadopago'
+        ? Math.round(baseTotalCents / MERCADOPAGO_NET_FACTOR)
+        : baseTotalCents;
+      const surchargeCents = chargedTotalCents - baseTotalCents;
+      const chargedTotal = chargedTotalCents / 100;
+      const surcharge = surchargeCents / 100;
       const requestedByProduct = new Map();
 
       for (const line of trustedOrder.lines) {
@@ -864,8 +876,8 @@ app.post('/api/orders', requireClient, async (req, res) => {
       }
 
       const orderResult = await transaction.run(
-        'INSERT INTO pedidos (cliente_id, total, estado) VALUES (?, ?, ?) RETURNING id',
-        [req.user.id, trustedOrder.total, 'pendiente']
+        'INSERT INTO pedidos (cliente_id, total, estado, metodo_pago, recargo_aplicado) VALUES (?, ?, ?, ?, ?) RETURNING id',
+        [req.user.id, chargedTotal, 'pendiente', paymentMethod, surcharge]
       );
       const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
 

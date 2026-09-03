@@ -12,6 +12,7 @@ export default function Cart() {
   
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('transferencia');
   
   // Checkout Form State
   const [formData, setFormData] = useState({
@@ -80,7 +81,7 @@ export default function Cart() {
     try {
       const orderData = {
         items: cart,
-        total: getCartTotal(),
+        metodo_pago: paymentMethod,
         shippingInfo: formData
       };
       const res = await api.createOrder(orderData, clientToken);
@@ -101,6 +102,11 @@ export default function Cart() {
       setCheckoutLoading(false);
     }
   };
+
+  const baseTotal = getCartTotal();
+  const displayedTotal = paymentMethod === 'mercadopago'
+    ? Math.round((baseTotal / 0.934) * 100) / 100
+    : baseTotal;
 
   if (checkoutStep === 'success') {
     return (
@@ -272,7 +278,7 @@ export default function Cart() {
           <div className="space-y-3 text-sm font-semibold">
             <div className="flex justify-between text-gray-500">
               <span>Subtotal</span>
-              <span className="text-gray-900 font-bold">{formatPrice(getCartTotal())}</span>
+              <span className="text-gray-900 font-bold">{formatPrice(baseTotal)}</span>
             </div>
             <div className="flex justify-between text-gray-500">
               <span>Envío</span>
@@ -281,9 +287,44 @@ export default function Cart() {
             <hr className="border-gray-200" />
             <div className="flex justify-between text-base font-extrabold text-gray-900">
               <span>Total</span>
-              <span className="font-black text-2xl text-gray-900">{formatPrice(getCartTotal())}</span>
+              <span className="font-black text-2xl text-gray-900">{formatPrice(displayedTotal)}</span>
             </div>
           </div>
+
+          <fieldset className="space-y-3 border-t border-gray-200 pt-4">
+            <legend className="font-extrabold text-sm text-gray-900">Método de pago</legend>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 cursor-pointer">
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="transferencia"
+                checked={paymentMethod === 'transferencia'}
+                onChange={(event) => setPaymentMethod(event.target.value)}
+                className="mt-1 accent-[#e52521]"
+              />
+              <span>
+                <span className="block text-xs font-extrabold text-gray-900">Transferencia / Efectivo</span>
+                <span className="block text-[11px] text-gray-500">Precio de lista</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 cursor-pointer">
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="mercadopago"
+                checked={paymentMethod === 'mercadopago'}
+                onChange={(event) => setPaymentMethod(event.target.value)}
+                className="mt-1 accent-[#e52521]"
+              />
+              <span>
+                <span className="block text-xs font-extrabold text-gray-900">MercadoPago</span>
+                <span className="block text-[11px] text-gray-500">Disponibilidad inmediata, costo absorbido</span>
+              </span>
+            </label>
+            {paymentMethod === 'mercadopago' && (
+              <p className="text-[11px] font-semibold text-gray-500">Incluye recargo del 7,06% por costos de plataforma.</p>
+            )}
+          </fieldset>
 
           {checkoutStep === 'cart' ? (
             <button
