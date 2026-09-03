@@ -55,8 +55,9 @@ export default function Cart() {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const statusParam = searchParams.get('status') || searchParams.get('collection_status');
+    const hasMpParams = searchParams.has('preference_id') || searchParams.has('payment_id') || searchParams.has('collection_id') || searchParams.has('merchant_order_id');
     
-    if (statusParam && ['failure', 'null', 'rejected', 'pending'].includes(String(statusParam).toLowerCase())) {
+    if ((statusParam && ['failure', 'null', 'rejected', 'pending'].includes(String(statusParam).toLowerCase())) || (hasMpParams && statusParam !== 'approved')) {
       setApiError('El pago no se completó, podés volver a intentarlo.');
       setCheckoutStep('checkout');
       setPaymentMethod('mercadopago');
