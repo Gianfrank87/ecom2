@@ -779,6 +779,7 @@ export default function Admin() {
   }
 
   const pendingOrdersCount = orders.filter(o => !['enviado', 'completado'].includes(o.estado)).length;
+  const shippedOrdersCount = orders.filter(o => o.estado === 'enviado').length;
   const pendingReceiptOrders = orders.filter(o => o.metodo_pago === 'transferencia' && o.estado === 'esperando_aprobacion' && o.comprobante_url);
   const unreadMessagesCount = messages.reduce((total, thread) => total + (thread.no_leidos ?? 0), 0);
   const stockDeactivatedOffers = offers.filter(o => o.desactivada_por_stock);
@@ -1154,9 +1155,29 @@ export default function Admin() {
       )}
 
       {activeTab === 'sales' && (() => {
-        const filteredOrders = orders.filter(o =>
-          salesView === 'pending' ? !['enviado', 'completado'].includes(o.estado) : ['enviado', 'completado'].includes(o.estado)
-        );
+        const filteredOrders = orders.filter(o => {
+          if (salesView === 'pending') return !['enviado', 'completado'].includes(o.estado);
+          if (salesView === 'shipped') return o.estado === 'enviado';
+          return o.estado === 'completado';
+        });
+
+        const emptyState = {
+          pending: {
+            emoji: '🎉',
+            title: '¡Sin pedidos pendientes! Todo al día.',
+            subtitle: 'Todos los pedidos ingresados han sido procesados.'
+          },
+          shipped: {
+            emoji: '📬',
+            title: 'No hay pedidos en tránsito.',
+            subtitle: 'Los pedidos marcados como enviados aparecerán acá hasta completarlos.'
+          },
+          resolved: {
+            emoji: '📦',
+            title: 'Sin pedidos completados todavía.',
+            subtitle: 'Los pedidos finalizados se muestran acá.'
+          }
+        }[salesView];
 
         return (
           <div className="space-y-4 text-left">
@@ -1175,7 +1196,7 @@ export default function Admin() {
               <h2 className="font-extrabold text-base text-gray-900">
                 Historial de Ventas
               </h2>
-              <div className="flex gap-1 bg-gray-200 p-1 rounded-xl">
+              <div className="flex gap-1 bg-gray-200 p-1 rounded-xl flex-wrap">
                 <button
                   onClick={() => setSalesView('pending')}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
@@ -1186,8 +1207,23 @@ export default function Admin() {
                 >
                   ⏳ No resueltos
                   {pendingOrdersCount > 0 && (
-                    <span className="bg-[#e52521] text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                    <span className="bg-[#e52521] text-white text-[10px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center">
                       {pendingOrdersCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSalesView('shipped')}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    salesView === 'shipped'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-700 hover:text-gray-900'
+                  }`}
+                >
+                  🚚 Enviados
+                  {shippedOrdersCount > 0 && (
+                    <span className="bg-[#0f172a] text-white text-[10px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center">
+                      {shippedOrdersCount}
                     </span>
                   )}
                 </button>
@@ -1206,13 +1242,9 @@ export default function Admin() {
 
             {filteredOrders.length === 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center shadow-xs">
-                <div className="text-4xl mb-3">{salesView === 'pending' ? '🎉' : '📦'}</div>
-                <p className="font-extrabold text-gray-900 mb-1">
-                  {salesView === 'pending' ? '¡Sin pedidos pendientes! Todo al día.' : 'Sin pedidos resueltos todavía.'}
-                </p>
-                <p className="text-gray-500 text-xs font-semibold">
-                  {salesView === 'pending' ? 'Todos los pedidos ingresados han sido procesados.' : 'Los pedidos enviados y completados se muestran acá.'}
-                </p>
+                <div className="text-4xl mb-3">{emptyState.emoji}</div>
+                <p className="font-extrabold text-gray-900 mb-1">{emptyState.title}</p>
+                <p className="text-gray-500 text-xs font-semibold">{emptyState.subtitle}</p>
               </div>
             )}
 
