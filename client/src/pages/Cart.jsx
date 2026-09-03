@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Trash2, Plus, Minus, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useClientAuth } from '../context/ClientAuthContext';
@@ -10,6 +10,7 @@ export default function Cart() {
   const { cart, updateQuantity, updateItemStock, removeFromCart, clearCart, getCartTotal } = useCart();
   const { clientUser, clientToken } = useClientAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -50,6 +51,17 @@ export default function Cart() {
       .catch((error) => setBankConfigError(error.message))
       .finally(() => setBankConfigLoading(false));
   }, [paymentMethod, bankConfig]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get('status') || searchParams.get('collection_status');
+    
+    if (statusParam && ['failure', 'null', 'rejected', 'pending'].includes(String(statusParam).toLowerCase())) {
+      setApiError('El pago no se completó, podés volver a intentarlo.');
+      setCheckoutStep('checkout');
+      setPaymentMethod('mercadopago');
+    }
+  }, [location.search]);
 
   // Helper to format currency
   const formatPrice = (value) => {
@@ -102,7 +114,6 @@ export default function Cart() {
       
       if (paymentMethod === 'mercadopago' && res.init_point) {
         setIsRedirecting(true);
-        clearCart();
         window.location.href = res.init_point;
         return;
       }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
+import { useCart } from '../context/CartContext';
 import { api } from '../services/api';
 import { Package, Clock, CheckCircle, Truck, AlertCircle, ChevronDown, ChevronUp, MessageCircle, Send, X } from 'lucide-react';
 import ReceiptUpload from '../components/ReceiptUpload';
@@ -294,11 +295,21 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
 
 export default function ClientOrders() {
   const { clientUser, clientToken, clientLogout } = useClientAuth();
+  const { clearCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [contactOrder, setContactOrder] = useState(null);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get('status') || searchParams.get('collection_status');
+    if (statusParam === 'approved') {
+      clearCart();
+    }
+  }, [location.search, clearCart]);
 
   useEffect(() => {
     if (!clientUser) {

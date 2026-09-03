@@ -228,13 +228,21 @@
 
 - Se instaló `mercadopago` (SDK v2) como dependencia del backend.
 - El cliente se inicializa con `MP_ACCESS_TOKEN` del entorno; si la variable no existe, el servidor arranca pero rechaza pedidos con método `mercadopago`.
-- `POST /api/orders` asigna el estado inicial `pendiente_pago` cuando el método es `mercadopago` (`esperando_aprobacion` para transferencia, `pendiente` para efectivo) y devuelve `{ orderId, init_point, message }`.
-- Los items de la preferencia se construyen a partir de los precios recalculados por el backend (nunca del frontend). El recargo se incluye como un item adicional con `id: 'RECARGO'`.
-- Se usa `external_reference: String(orderId)` y clave de idempotencia única por request (`crypto.randomUUID()`).
-- Las `back_urls` (success/failure/pending) apuntan a `${CLIENT_URL}/mis-pedidos` con `auto_return: 'approved'`.
-- **Frontend (Cart.jsx)**: Al hacer click en "Finalizar Compra" con Mercado Pago, el botón muestra `"Redirigiendo a Mercado Pago..."` y se inhabilita para prevenir dobles clics hasta que se ejecuta `window.location.href`.
-- **Webhook (`POST /api/webhooks/mercadopago`)**: Endpoint público que procesa notificaciones de pago. Si `MP_WEBHOOK_SECRET` está configurado, valida la firma criptográfica del header `x-signature` mediante `WebhookSignatureValidator.validate()`. Al recibir un pago con estado `approved`, busca el pedido por `external_reference` y actualiza su estado de `pendiente_pago` a `aprobado`.
-- **Variables de entorno en Render**: `MP_ACCESS_TOKEN`, `CLIENT_URL` y opcionalmente `MP_WEBHOOK_SECRET` (para validar la firma criptográfica en producción).
+- **Creación de pedidos (`POST /api/orders`)**: Asigna el estado inicial `pendiente_pago` cuando el método es `mercadopago` (`esperando_aprobacion` para transferencia, `pendiente` para efectivo). Para Mercado Pago, valida que haya stock disponible pero **NO descuenta el stock en ese momento**, manteniendo los productos intactos si el usuario abandona el flujo. Devuelve `{ orderId, init_point, message }`.
+- **Preferencia de Pago**:
+  - `back_urls`: `success` apunta a `${CLIENT_URL}/mis-pedidos`, `failure` y `pending` apuntan a `${CLIENT_URL}/cart`.
+  - `auto_return: 'approved'`.
+  - Los items se construyen con precios recalculados por el backend y recargo como item `RECARGO`. Clave de idempotencia única por request (`crypto.randomUUID()`).
+- **Descuento de Stock en Webhook (`POST /api/webhooks/mercadopago`)**: Al recibir una notificación con estado `approved`, en una única transacción de base de datos (`withTransaction`):
+  - Verifica de forma idempotente que el pedido no haya sido procesado previamente.
+  - Ejecuta el descuento atómico de stock real (`GREATEST(0, stock - ?)`) para cada producto del pedido.
+  - Desactiva ofertas si el stock llega a 0.
+  - Actualiza el estado del pedido a `aprobado`.
+- **Frontend (`Cart.jsx` y `ClientOrders.jsx`)**:
+  - Al redirigir a Mercado Pago, el carrito **no se vacía**. El botón pasa a `"Redirigiendo a Mercado Pago..."` e inhabilita reintentos hasta que se realiza la navegación.
+  - Si el usuario cancela o falla el pago en MP y regresa a `/cart` (URL con `?status=failure`, `?status=null`, etc.), el carrito conserva sus productos, muestra el mensaje `'El pago no se completó, podés volver a intentarlo.'` y permite generar un nuevo link.
+  - Cuando el usuario completa el pago y regresa a `/mis-pedidos?status=approved`, el carrito se limpia automáticamente.
+- **Variables de entorno en Render**: `MP_ACCESS_TOKEN`, `CLIENT_URL` y opcionalmente `MP_WEBHOOK_SECRET`.
 
 ---
 

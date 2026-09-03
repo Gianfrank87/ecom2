@@ -953,26 +953,41 @@ app.post('/api/orders', requireClient, async (req, res) => {
       }
 
       const updatedProducts = [];
-      for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
-        const result = await transaction.run(
-          `UPDATE productos
-           SET stock = stock - ?
-           WHERE id = ? AND activo = TRUE AND stock >= ?
-           RETURNING id, nombre, stock`,
-          [requested.quantity, productId, requested.quantity]
-        );
-        const product = result.rows?.[0];
-        if (!product) {
-          const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
+      if (paymentMethod !== 'mercadopago') {
+        for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
+          const result = await transaction.run(
+            `UPDATE productos
+             SET stock = stock - ?
+             WHERE id = ? AND activo = TRUE AND stock >= ?
+             RETURNING id, nombre, stock`,
+            [requested.quantity, productId, requested.quantity]
+          );
+          const product = result.rows?.[0];
+          if (!product) {
+            const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
+            if (!current) {
+              throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
+            }
+            throw Object.assign(
+              new Error(`Solo quedan ${current.stock} unidades de ${current.nombre}.`),
+              { status: 409, productId: current.id, available: current.stock, productName: current.nombre }
+            );
+          }
+          updatedProducts.push(product);
+        }
+      } else {
+        for (const [productId, requested] of requestedByProduct) {
+          const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ? AND activo = TRUE', [productId]);
           if (!current) {
             throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
           }
-          throw Object.assign(
-            new Error(`Solo quedan ${current.stock} unidades de ${current.nombre}.`),
-            { status: 409, productId: current.id, available: current.stock, productName: current.nombre }
-          );
+          if (current.stock < requested.quantity) {
+            throw Object.assign(
+              new Error(`Solo quedan ${current.stock} unidades de ${current.nombre}.`),
+              { status: 409, productId: current.id, available: current.stock, productName: current.nombre }
+            );
+          }
         }
-        updatedProducts.push(product);
       }
 
       const initialStatus = paymentMethod === 'transferencia'
@@ -1038,8 +1053,8 @@ app.post('/api/orders', requireClient, async (req, res) => {
           external_reference: String(orderId),
           back_urls: {
             success: `${host}/mis-pedidos`,
-            failure: `${host}/mis-pedidos`,
-            pending: `${host}/mis-pedidos`
+            failure: `${host}/cart`,
+            pending: `${host}/cart`
           },
           auto_return: 'approved'
         },
@@ -1100,10 +1115,51 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
       if (paymentData && paymentData.status === 'approved') {
         const orderId = paymentData.external_reference;
         if (orderId) {
-          await dbRun(
-            "UPDATE pedidos SET estado = 'aprobado' WHERE id = ? AND estado IN ('pendiente_pago', 'pendiente')",
-            [orderId]
-          );
+          await withTransaction(async (transaction) => {
+            const order = await transaction.get(
+              'SELECT id, estado FROM pedidos WHERE id = ?',
+              [orderId]
+            );
+
+            if (!order || order.estado === 'aprobado') {
+              return;
+            }
+
+            const items = await transaction.all(
+              `SELECT pi.producto_id, pi.cantidad, pr.nombre AS producto_nombre
+               FROM pedido_items pi
+               JOIN productos pr ON pr.id = pi.producto_id
+               WHERE pi.pedido_id = ?`,
+              [orderId]
+            );
+
+            const requestedByProduct = new Map();
+            for (const item of items) {
+              const productId = String(item.producto_id);
+              const current = requestedByProduct.get(productId) || { quantity: 0, name: item.producto_nombre };
+              current.quantity += item.cantidad;
+              requestedByProduct.set(productId, current);
+            }
+
+            for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
+              const result = await transaction.run(
+                `UPDATE productos
+                 SET stock = GREATEST(0, stock - ?)
+                 WHERE id = ?
+                 RETURNING id, nombre, stock`,
+                [requested.quantity, productId]
+              );
+              const product = result.rows?.[0];
+              if (product && Number(product.stock) === 0) {
+                await deactivateOffersForProduct(product.id, product.nombre, transaction);
+              }
+            }
+
+            await transaction.run(
+              "UPDATE pedidos SET estado = 'aprobado' WHERE id = ?",
+              [orderId]
+            );
+          });
         }
       }
     }
