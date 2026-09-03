@@ -1,15 +1,44 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import { dbAll, dbGet, dbRun } from './db.js';
+import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error('JWT_SECRET es obligatorio y debe tener al menos 32 caracteres.');
+}
+
+const signingSecret = JWT_SECRET;
+
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidImageUrl = (value) => {
+  if (!value) return true;
+  try {
+    const url = new URL(String(value));
+    return url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+const internalError = (res) => res.status(500).json({ error: 'Error interno del servidor.' });
+const allowedCategories = new Set(['collares', 'correas', 'alimentos', 'juguetes', 'consejos']);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Probá nuevamente más tarde.' },
+});
+
+app.disable('x-powered-by');
 
 // Enable CORS and JSON parsing
 app.use(cors({
@@ -20,7 +49,13 @@ app.use(cors({
   ],
   credentials: true,
 }));
-app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+app.use(express.json({ limit: '1mb' }));
 
 // Middleware: require an authenticated user with the admin role
 const requireAdmin = (req, res, next) => {
@@ -30,7 +65,7 @@ const requireAdmin = (req, res, next) => {
   }
   const token = auth.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, signingSecret);
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'No tenés permisos de administrador.' });
     }
@@ -49,7 +84,7 @@ const requireClient = (req, res, next) => {
   }
   const token = auth.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, signingSecret);
     req.user = decoded; // { id, email, name }
     next();
   } catch (err) {
@@ -101,15 +136,15 @@ const mapOffer = async (o) => {
   };
 };
 
-const deactivateOffersForProduct = async (productId, productName) => {
-  const offers = await dbAll('SELECT id, producto_ids FROM ofertas WHERE activa = TRUE');
+const deactivateOffersForProduct = async (productId, productName, query = { all: dbAll, run: dbRun }) => {
+  const offers = await query.all('SELECT id, producto_ids FROM ofertas WHERE activa = TRUE');
   const affectedOffers = offers.filter((offer) => {
     const productIds = JSON.parse(offer.producto_ids || '[]').map(String);
     return productIds.includes(String(productId));
   });
 
   for (const offer of affectedOffers) {
-    await dbRun(
+    await query.run(
       `UPDATE ofertas
        SET activa = FALSE, desactivada_por_stock = TRUE,
            producto_sin_stock_id = ?, producto_sin_stock_nombre = ?
@@ -121,20 +156,115 @@ const deactivateOffersForProduct = async (productId, productName) => {
   return affectedOffers.length;
 };
 
+const getTrustedOrderLines = async (items, query = { get: dbGet, all: dbAll }) => {
+  if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
+    throw Object.assign(new Error('El pedido no tiene items válidos.'), { status: 400 });
+  }
+
+  const lines = [];
+  let total = 0;
+
+  for (const item of items) {
+    const quantity = Number(item?.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 99) {
+      throw Object.assign(new Error('La cantidad solicitada no es válida.'), { status: 400 });
+    }
+
+    if (item.isOffer) {
+      const offer = await query.get(
+        'SELECT id, producto_ids, descuento_o_precio_paquete, tipo_descuento FROM ofertas WHERE id = ? AND activa = TRUE',
+        [item.offerId]
+      );
+      if (!offer) {
+        throw Object.assign(new Error('La oferta ya no está disponible.'), { status: 409 });
+      }
+
+      let productIds;
+      try {
+        productIds = JSON.parse(offer.producto_ids || '[]').map(String);
+      } catch {
+        throw Object.assign(new Error('La oferta no tiene productos válidos.'), { status: 409 });
+      }
+      if (productIds.length < 2) {
+        throw Object.assign(new Error('La oferta no tiene productos válidos.'), { status: 409 });
+      }
+
+      const placeholders = productIds.map(() => '?').join(',');
+      const products = await query.all(
+        `SELECT id, nombre, precio, stock FROM productos WHERE id IN (${placeholders}) AND activo = TRUE`,
+        productIds
+      );
+      if (products.length !== productIds.length) {
+        throw Object.assign(new Error('Uno de los productos de la oferta ya no está disponible.'), { status: 409 });
+      }
+
+      const originalTotal = products.reduce((sum, product) => sum + Number(product.precio), 0);
+      const configuredValue = Number(offer.descuento_o_precio_paquete);
+      const offerPrice = offer.tipo_descuento === 'porcentaje'
+        ? originalTotal * (1 - configuredValue / 100)
+        : configuredValue;
+      if (!Number.isFinite(offerPrice) || offerPrice <= 0 || offerPrice > originalTotal) {
+        throw Object.assign(new Error('La oferta tiene un precio inválido.'), { status: 409 });
+      }
+
+      total += offerPrice * quantity;
+      const pricePerProduct = offerPrice / products.length;
+      for (const product of products) {
+        lines.push({
+          productId: product.id,
+          productName: product.nombre,
+          quantity,
+          unitPrice: pricePerProduct,
+          offerId: offer.id,
+          stock: Number(product.stock)
+        });
+      }
+    } else {
+      const product = await query.get(
+        'SELECT id, nombre, precio, stock FROM productos WHERE id = ? AND activo = TRUE',
+        [item?.id]
+      );
+      if (!product) {
+        throw Object.assign(new Error('El producto ya no está disponible.'), { status: 409 });
+      }
+      const unitPrice = Number(product.precio);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        throw Object.assign(new Error('El producto tiene un precio inválido.'), { status: 409 });
+      }
+      total += unitPrice * quantity;
+      lines.push({
+        productId: product.id,
+        productName: product.nombre,
+        quantity,
+        unitPrice,
+        offerId: null,
+        stock: Number(product.stock)
+      });
+    }
+  }
+
+  return { lines, total: Math.round(total * 100) / 100 };
+};
+
 // ─────────────────────────────────────────
 // AUTH CLIENTES
 // ─────────────────────────────────────────
 
 // POST /api/clients/register
-app.post('/api/clients/register', async (req, res) => {
+app.post('/api/clients/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName || !normalizedEmail || !password) {
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    }
+    if (normalizedName.length > 120 || !isValidEmail(normalizedEmail) || String(password).length < 8) {
+      return res.status(400).json({ error: 'Datos de registro inválidos.' });
     }
     
     // Check if email exists
-    const existing = await dbGet('SELECT id FROM clientes WHERE email = ?', [email]);
+    const existing = await dbGet('SELECT id FROM clientes WHERE lower(email) = lower(?)', [normalizedEmail]);
     if (existing) {
       return res.status(400).json({ error: 'El email ya está registrado' });
     }
@@ -144,31 +274,31 @@ app.post('/api/clients/register', async (req, res) => {
 
     const result = await dbRun(
       'INSERT INTO clientes (nombre, email, password_hash) VALUES (?, ?, ?) RETURNING id',
-      [name, email, hash]
+      [normalizedName, normalizedEmail, hash]
     );
     const newClientId = result.rows?.[0]?.id ?? result.lastID;
 
     const token = jwt.sign(
-      { id: newClientId, email, name, role: 'cliente' },
-      JWT_SECRET,
+      { id: newClientId, email: normalizedEmail, name: normalizedName, role: 'cliente' },
+      signingSecret,
       { expiresIn: '7d' }
     );
 
     res.status(201).json({ 
       token, 
-      user: { id: newClientId, name, email, role: 'cliente' },
+      user: { id: newClientId, name: normalizedName, email: normalizedEmail, role: 'cliente' },
       message: 'Registro exitoso' 
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
 // POST /api/clients/login
-app.post('/api/clients/login', async (req, res) => {
+app.post('/api/clients/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (!email || !password || String(email).length > 255 || String(password).length > 256) {
       return res.status(400).json({ error: 'Email o usuario y contraseña son requeridos' });
     }
 
@@ -187,7 +317,7 @@ app.post('/api/clients/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: client.id, email: client.email, name: client.nombre, role: client.rol || 'cliente' },
-      JWT_SECRET,
+      signingSecret,
       { expiresIn: '7d' }
     );
 
@@ -197,7 +327,7 @@ app.post('/api/clients/login', async (req, res) => {
       message: 'Login exitoso' 
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -216,18 +346,18 @@ app.get('/api/products', async (req, res) => {
     const products = await dbAll('SELECT * FROM productos WHERE activo = TRUE ORDER BY orden ASC, id ASC');
     res.json(products.map(mapProduct));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
 // GET /api/products/:id
 app.get('/api/products/:id', async (req, res) => {
   try {
-    const product = await dbGet('SELECT * FROM productos WHERE id = ?', [req.params.id]);
+    const product = await dbGet('SELECT * FROM productos WHERE id = ? AND activo = TRUE', [req.params.id]);
     if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
     res.json(mapProduct(product));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -240,17 +370,22 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     }
 
     const normalizedCategory = String(category).trim().toLowerCase();
+    const numericPrice = Number(price);
+    const numericStock = Number(stock);
+    if (String(name).trim().length > 120 || String(description || '').length > 5000 || !isValidImageUrl(image) || !allowedCategories.has(normalizedCategory) || !Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isInteger(numericStock) || numericStock < 0) {
+      return res.status(400).json({ error: 'Datos de producto inválidos.' });
+    }
     const maxOrdenRow = await dbGet('SELECT COALESCE(MAX(orden), 0) as maxOrden FROM productos');
     const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
       `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo, orden)
        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?) RETURNING id`,
-      [name, description, Number(price), Number(stock) || 0, normalizedCategory, image, Boolean(featured), nextOrden]
+      [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, image, Boolean(featured), nextOrden]
     );
     const newProductId = result.rows?.[0]?.id ?? result.lastID;
     res.status(201).json({ id: String(newProductId), message: 'Producto creado exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -267,7 +402,7 @@ app.patch('/api/products/reorder', requireAdmin, async (req, res) => {
     }
     res.json({ message: 'Orden actualizado exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -280,14 +415,20 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
     }
     const check = await dbGet('SELECT id FROM productos WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Producto no encontrado' });
+    const normalizedCategory = String(category).trim().toLowerCase();
+    const numericPrice = Number(price);
+    const numericStock = Number(stock);
+    if (String(name).trim().length > 120 || String(description || '').length > 5000 || !isValidImageUrl(image) || !allowedCategories.has(normalizedCategory) || !Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isInteger(numericStock) || numericStock < 0) {
+      return res.status(400).json({ error: 'Datos de producto inválidos.' });
+    }
     await dbRun(
       `UPDATE productos SET nombre=?, descripcion=?, precio=?, stock=?, categoria=?, imagen_url=?, destacado=? WHERE id=?`,
-      [name, description, Number(price), Number(stock) || 0, category, image, Boolean(featured), req.params.id]
+      [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, image, Boolean(featured), req.params.id]
     );
     if (Number(stock) === 0) await deactivateOffersForProduct(check.id, name);
     res.json({ message: 'Producto actualizado exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -300,7 +441,7 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
     await dbRun('DELETE FROM productos WHERE id = ?', [req.params.id]);
     res.json({ message: 'Producto eliminado exitosamente', deactivatedOffers });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -323,7 +464,7 @@ app.patch('/api/products/:id/stock', requireAdmin, async (req, res) => {
 
     res.json({ stock: newStock, deactivatedOffers });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -333,7 +474,7 @@ app.get('/api/categories', async (req, res) => {
     const categories = await dbAll('SELECT * FROM categorias ORDER BY nombre ASC');
     res.json(categories.map((c) => ({ id: String(c.id), name: c.nombre })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -350,7 +491,7 @@ app.get('/api/offers/active', async (req, res) => {
       offer.products.length === offer.producto_ids.length && offer.products.every((product) => product.stock > 0)
     )));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -361,7 +502,7 @@ app.get('/api/offers', requireAdmin, async (req, res) => {
     const offers = await Promise.all(rows.map(mapOffer));
     res.json(offers);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -379,7 +520,7 @@ app.post('/api/offers', requireAdmin, async (req, res) => {
     const newOfferId = result.rows?.[0]?.id ?? result.lastID;
     res.status(201).json({ id: String(newOfferId), message: 'Oferta creada exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -395,7 +536,7 @@ app.put('/api/offers/:id', requireAdmin, async (req, res) => {
     );
     res.json({ message: 'Oferta actualizada exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -414,7 +555,7 @@ app.patch('/api/offers/:id/toggle', requireAdmin, async (req, res) => {
     );
     res.json({ message: `Oferta ${newState ? 'activada' : 'desactivada'}`, activa: Boolean(newState) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -426,7 +567,7 @@ app.delete('/api/offers/:id', requireAdmin, async (req, res) => {
     await dbRun('DELETE FROM ofertas WHERE id = ?', [req.params.id]);
     res.json({ message: 'Oferta eliminada exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -457,7 +598,7 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
 
     res.json(orders);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -475,7 +616,7 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
     await dbRun('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, req.params.id]);
     res.json({ message: 'Estado actualizado exitosamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -510,7 +651,7 @@ app.get('/api/orders/:id/messages', requireClient, async (req, res) => {
     ) : [];
     res.json(messages);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -537,7 +678,7 @@ app.post('/api/orders/:id/messages', requireClient, async (req, res) => {
     const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [messageId]);
     res.status(201).json(message);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -557,7 +698,7 @@ app.patch('/api/orders/:id/messages/close', requireAdmin, async (req, res) => {
     const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [messageId]);
     res.json({ cerrado: true, message });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -581,7 +722,7 @@ app.patch('/api/orders/:id/messages/reopen', requireClient, async (req, res) => 
     const message = await dbGet('SELECT id, pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado FROM mensajes WHERE id = ?', [messageId]);
     res.json({ reabierto: true, message });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -597,7 +738,7 @@ app.patch('/api/orders/:id/messages/read', requireClient, async (req, res) => {
     );
     res.json({ message: 'Mensajes marcados como leídos.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -650,7 +791,7 @@ app.get('/api/messages', requireAdmin, async (req, res) => {
     }
     res.json([...grouped.values()].reverse());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
@@ -680,104 +821,83 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
 
     res.json(orders);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res);
   }
 });
 
 // POST /api/orders (protected client)
 app.post('/api/orders', requireClient, async (req, res) => {
-  let transactionStarted = false;
   try {
-    const { items, total } = req.body;
-    if (!items || items.length === 0) {
-      return res.status(400).json({ error: 'El pedido no tiene items' });
-    }
+    const { items } = req.body;
+    const orderId = await withTransaction(async (transaction) => {
+      const trustedOrder = await getTrustedOrderLines(items, transaction);
+      const requestedByProduct = new Map();
 
-    // PostgreSQL transaction syntax.
-    await dbRun('BEGIN');
-    transactionStarted = true;
-
-    const requestedByProduct = new Map();
-    for (const item of items) {
-      const products = item.isOffer ? item.products : [item];
-      for (const product of products || []) {
-        const quantity = Number(item.quantity);
-        if (!Number.isInteger(quantity) || quantity <= 0) {
-          throw Object.assign(new Error('La cantidad solicitada no es válida.'), { status: 400 });
-        }
-        const productId = String(product.id);
-        const current = requestedByProduct.get(productId) || { quantity: 0, name: product.name || 'Producto' };
-        current.quantity += quantity;
+      for (const line of trustedOrder.lines) {
+        const productId = String(line.productId);
+        const current = requestedByProduct.get(productId) || { quantity: 0, name: line.productName };
+        current.quantity += line.quantity;
         requestedByProduct.set(productId, current);
       }
-    }
 
-    for (const [productId, requested] of requestedByProduct) {
-      const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
-      if (!product) {
-        throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
-      }
-      if (requested.quantity > Number(product.stock)) {
-        throw Object.assign(
-          new Error(`Solo quedan ${product.stock} unidades de ${product.nombre}.`),
-          { status: 409, productId: product.id, available: product.stock, productName: product.nombre }
+      const updatedProducts = [];
+      for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
+        const result = await transaction.run(
+          `UPDATE productos
+           SET stock = stock - ?
+           WHERE id = ? AND activo = TRUE AND stock >= ?
+           RETURNING id, nombre, stock`,
+          [requested.quantity, productId, requested.quantity]
         );
-      }
-    }
-
-    // 1. Crear el pedido, only after every item passed validation.
-    const orderResult = await dbRun(
-      'INSERT INTO pedidos (cliente_id, total, estado) VALUES (?, ?, ?) RETURNING id',
-      [req.user.id, Number(total), 'pendiente']
-    );
-    const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
-
-    // 2. Insertar items y descontar stock
-    for (const item of items) {
-      if (item.isOffer) {
-        const pricePerItem = item.price / item.products.length;
-        for (const p of item.products) {
-          await dbRun(
-            'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, oferta_id) VALUES (?, ?, ?, ?, ?)',
-            [pedidoId, p.id, item.quantity, pricePerItem, item.offerId]
+        const product = result.rows?.[0];
+        if (!product) {
+          const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
+          if (!current) {
+            throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
+          }
+          throw Object.assign(
+            new Error(`Solo quedan ${current.stock} unidades de ${current.nombre}.`),
+            { status: 409, productId: current.id, available: current.stock, productName: current.nombre }
           );
-          await dbRun(
-            'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-            [item.quantity, p.id]
-          );
-          const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [p.id]);
-          if (product?.stock === 0) await deactivateOffersForProduct(product.id, product.nombre);
         }
-      } else {
-        await dbRun(
-          'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
-          [pedidoId, item.id, item.quantity, item.price]
-        );
-        await dbRun(
-          'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-          [item.quantity, item.id]
-        );
-        const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [item.id]);
-        if (product?.stock === 0) await deactivateOffersForProduct(product.id, product.nombre);
+        updatedProducts.push(product);
       }
-    }
 
-    await dbRun('COMMIT');
-    transactionStarted = false;
-    res.status(201).json({ 
-      orderId: pedidoId, 
+      const orderResult = await transaction.run(
+        'INSERT INTO pedidos (cliente_id, total, estado) VALUES (?, ?, ?) RETURNING id',
+        [req.user.id, trustedOrder.total, 'pendiente']
+      );
+      const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
+
+      for (const line of trustedOrder.lines) {
+        await transaction.run(
+          'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, oferta_id) VALUES (?, ?, ?, ?, ?)',
+          [pedidoId, line.productId, line.quantity, line.unitPrice, line.offerId]
+        );
+      }
+
+      for (const product of updatedProducts) {
+        if (Number(product.stock) === 0) {
+          await deactivateOffersForProduct(product.id, product.nombre, transaction);
+        }
+      }
+
+      return pedidoId;
+    });
+    res.status(201).json({
+      orderId,
       message: 'Pedido creado exitosamente' 
     });
   } catch (err) {
-    if (transactionStarted) {
-      try { await dbRun('ROLLBACK'); } catch (_) {}
+    if (err.status) {
+      return res.status(err.status).json({
+        error: err.message,
+        productId: err.productId,
+        available: err.available,
+        productName: err.productName
+      });
     }
-    res.status(err.status || 500).json({
-      error: err.message,
-      productId: err.productId,
-      available: err.available,
-      productName: err.productName
-    });
+    internalError(res);
   }
 });
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cd client && vite",
     "build": "cd client && vite build",
-    "lint": "oxlint \"client/src/**/*.{js,jsx}\"",
+    "lint": "oxlint client/src",
     "preview": "cd client && vite preview",
     "dev:server": "node --env-file=.env server/index.js"
   },
@@ -15,6 +15,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "dotenv": "^17.4.2",
+    "express-rate-limit": "^8.7.0",
     "lucide-react": "^1.31.0",
     "pg": "^8.23.0",
     "react": "^19.2.8",

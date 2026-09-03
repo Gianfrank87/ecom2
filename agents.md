@@ -18,7 +18,7 @@
   - Node.js (ES Modules `"type": "module"`)
   - Express.js (Puerto `5000`)
   - CORS habilitado
-  - SQLite3 (`server/database.db`) con queries portables a MySQL
+  - PostgreSQL mediante `pg` y `DATABASE_URL`
 - **Servidores Dev**:
   - Frontend: `http://localhost:5173/`
   - Backend: `http://localhost:5000/`
@@ -156,13 +156,25 @@
 21. ~~**Confirmación al reactivar ofertas con stock irregular**: El toggle de activación evalúa tanto `desactivada_por_stock` como el stock actual de todos los productos asociados. Si alguno está en `0`, muestra el modal con el listado de productos y las acciones `Cancelar` / `Activar igual`; las ofertas sin problemas se activan directamente.~~ (Completado)
 22. ~~**UX de checkboxes en Admin**: Los checkboxes de destacar productos, seleccionar productos de ofertas y activar ofertas ahora se pueden cambiar haciendo click en el recuadro, el texto o la fila completa de cada opción.~~ (Completado)
 23. ~~**Mensajes y reclamos por pedido**: Se agregó la tabla `mensajes` y endpoints protegidos para consultar, enviar y marcar mensajes como leídos. Los clientes pueden contactar desde `/mis-pedidos`; Admin tiene una pestaña de Mensajes agrupada por pedido, con respuestas y badge de no leídos. El menú de perfil admin reemplaza Mis Pedidos por accesos a Pendientes, Ventas y Mensajes.~~ (Completado)
-24. ~~**Validación transaccional de stock en checkout**: `POST /api/orders` valida dentro de una transacción `BEGIN IMMEDIATE` la cantidad total solicitada de cada producto, incluyendo componentes de ofertas, antes de crear el pedido o descontar stock. Si algún producto no alcanza, responde HTTP 409 con el nombre y stock disponible y ejecuta rollback. La compra excedida fue probada y no creó ningún pedido.~~ (Completado)
+24. ~~**Validación transaccional de stock en checkout**: `POST /api/orders` ejecuta todo el flujo con una única conexión PostgreSQL mediante `withTransaction`, descuenta stock con `UPDATE ... WHERE stock >= cantidad RETURNING` y revierte pedido/items/ofertas ante cualquier error. Las compras concurrentes no pueden llevar stock a valores negativos ni sobre-vender unidades.~~ (Completado)
 25. ~~**UX de stock desactualizado en carrito**: Cuando el checkout recibe un rechazo por stock insuficiente, el cliente muestra el producto, las unidades disponibles y ajusta automáticamente la cantidad y el stock del item en el carrito para evitar repetir la compra inválida.~~ (Completado)
 26. ~~**UX de mensajería y notificaciones**: El hilo del Admin permanece abierto al responder y refresca la conversación; los perfiles muestran un badge con el conteo real de mensajes sin leer, que se actualiza al marcar el hilo como leído. En `Mis Pedidos`, el botón cambia de `Contactar sobre este pedido` a `Abrir chat` cuando ya existe conversación.~~ (Completado)
 27. ~~**Cierre y reapertura de reclamos**: El Admin puede cerrar el hilo; se agrega un mensaje de sistema visible al cliente, se bloquea la escritura del hilo cerrado y el cliente puede abrir un reclamo nuevo para el mismo pedido sin mezclar conversaciones.~~ (Completado)
 28. ~~**Reapertura real de reclamos**: La reapertura usa un endpoint propio que crea un nuevo `hilo_id`, agrega el mensaje de sistema `[cliente] reabrió el reclamo` y deja el hilo escribible. El Admin puede volver a cerrarlo definitivamente desde el mismo chat.~~ (Completado)
 29. ~~**Indicador de cierre en Mensajes**: Cada hilo cerrado muestra el badge `Cerrado` en gris en el listado del panel Admin, diferenciándolo de los reclamos abiertos.~~ (Completado)
 30. ~~**Notificaciones visibles de mensajes**: El contador real de mensajes sin leer se muestra como una burbuja roja superpuesta fuera del botón/avatar de perfil, tanto para admin como para cliente, y se actualiza al marcar conversaciones como leídas.~~ (Completado)
+
+31. ~~**Endurecimiento previo a pagos**: Se eliminó el fallback conocido de `JWT_SECRET`; el backend no inicia sin un secreto de al menos 32 caracteres. Se agregó rate limiting a login/registro, se dejaron de exponer errores internos, el endpoint público ya no devuelve productos inactivos y los productos validan límites y URLs HTTPS.~~ (Completado)
+32. ~~**Retiro del production gate inseguro**: Se eliminó la contraseña fija del bundle del frontend. La protección de un entorno no público debe configurarse en la plataforma de despliegue o en el servidor.~~ (Completado)
+
+## 🔐 Reglas de seguridad para implementar pagos
+
+- Nunca aceptar desde el frontend el total, precio, estado de pago, rol o identidad del cliente como fuente de verdad; recalcular todo en el backend.
+- Los comprobantes deben validarse por tamaño, MIME real y firma del archivo, guardarse fuera del frontend en almacenamiento privado con nombres aleatorios y servirse sólo mediante URLs autorizadas y temporales.
+- Los endpoints de subida, aprobación y rechazo deben requerir autenticación y autorización explícitas; el cliente sólo puede acceder a comprobantes de sus propios pedidos y el admin sólo mediante `requireAdmin`.
+- Agregar una clave de idempotencia por intento de checkout y verificar la firma de cualquier webhook de la pasarela antes de cambiar estados o registrar pagos.
+- Mantener `JWT_SECRET` y `DATABASE_URL` únicamente como secretos del entorno; nunca commitear `.env`, valores reales ni secretos en bundles.
+- Antes de producción configurar HTTPS, CORS con orígenes explícitos, rate limiting distribuido si hay varias instancias, logs sin datos sensibles y backups protegidos.
 
 ---
 
