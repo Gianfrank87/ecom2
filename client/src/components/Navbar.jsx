@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Menu, X, ShieldCheck, User, Package, LogOut, ChevronDown, Search, Truck, Banknote, Star, Zap, MessageCircle } from 'lucide-react';
+
+const BRAND_LOGO = 'https://res.cloudinary.com/dl3t6vykm/image/upload/v1788728634/244d8c75-d16f-49ba-b9ca-3eec01104792.png';
 import { useCart } from '../context/CartContext';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
@@ -179,12 +181,14 @@ export default function Navbar() {
           
           {/* Logo */}
           <Link to="/" onClick={handleLinkClick} className="flex items-center gap-2.5 shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-[#e52521] flex items-center justify-center text-white font-black text-xl shadow-sm">
-              🐾
-            </div>
+            <img
+              src={BRAND_LOGO}
+              alt="Logo de NIGDIZ"
+              className="h-12 w-auto max-w-[190px] object-contain"
+            />
             <div className="flex flex-col text-left">
               <span className="font-extrabold text-xl tracking-tight text-gray-900 leading-none">
-                SEHOLA
+                NigDiz
               </span>
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">
                 Innovación, diseño &amp; Cuidado

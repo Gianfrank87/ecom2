@@ -34,10 +34,10 @@ export default function ProductCard({ product }) {
   return (
     <Link
       to={`/product/${product.id}`}
-      className="group bg-white rounded-xl border border-gray-200 hover:border-red-500 hover:shadow-md transition-all duration-200 flex flex-col justify-between relative overflow-hidden text-left"
+      className="group bg-white rounded-xl border border-gray-200 hover:border-amber-500 hover:shadow-md transition-all duration-200 flex flex-col justify-between relative overflow-hidden text-left"
     >
       {/* Accent Top Border */}
-      <div className="h-1 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 w-full" />
+      <div className="h-1 bg-gradient-to-r from-amber-600 via-amber-500 to-cyan-400 w-full" />
 
       {/* Frame de Imagen */}
       <div className="relative aspect-square bg-gray-50 p-4 flex items-center justify-center border-b border-gray-100 overflow-hidden">
@@ -64,7 +64,7 @@ export default function ProductCard({ product }) {
         {/* Overlay sin stock */}
         {product.stock <= 0 && (
           <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-[1px] flex items-center justify-center z-10">
-            <span className="font-extrabold text-xs uppercase tracking-widest text-white bg-red-600 px-3 py-1.5 rounded-md shadow-md">
+            <span className="font-extrabold text-xs uppercase tracking-widest text-white bg-amber-600 px-3 py-1.5 rounded-md shadow-md">
               Sin Stock
             </span>
           </div>
@@ -75,12 +75,12 @@ export default function ProductCard({ product }) {
       <div className="p-4 flex-grow flex flex-col justify-between">
         <div>
           {/* Subtítulo de categoría/marca */}
-          <span className="text-[11px] font-black text-red-600 uppercase tracking-widest block mb-1">
+          <span className="text-[11px] font-black text-amber-700 uppercase tracking-widest block mb-1">
             {product.category || 'Huellitas'}
           </span>
 
           {/* Título de producto */}
-          <h3 className="font-bold text-sm sm:text-base text-gray-900 line-clamp-2 leading-snug group-hover:text-red-600 transition-colors mb-2 min-h-[2.5rem]">
+          <h3 className="font-bold text-sm sm:text-base text-gray-900 line-clamp-2 leading-snug group-hover:text-amber-700 transition-colors mb-2 min-h-[2.5rem]">
             {product.name}
           </h3>
 
@@ -89,7 +89,7 @@ export default function ProductCard({ product }) {
             {variantChips.slice(0, 3).map((chip, idx) => (
               <span
                 key={idx}
-                className="text-[10px] font-bold text-gray-600 bg-gray-100 hover:bg-red-50 hover:text-red-600 border border-gray-200 rounded px-1.5 py-0.5 transition-colors"
+                className="text-[10px] font-bold text-gray-600 bg-gray-100 hover:bg-amber-50 hover:text-amber-700 border border-gray-200 rounded px-1.5 py-0.5 transition-colors"
               >
                 {chip}
               </span>

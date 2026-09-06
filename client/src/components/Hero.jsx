@@ -40,14 +40,14 @@ export default function Hero() {
           align-items: center;
           gap: 0.5rem;
           border-radius: 9999px;
-          background: linear-gradient(180deg, #ef2e2b 0%, #dd1d1a 100%);
+          background: linear-gradient(180deg, #e5c84d 0%, #b89420 100%);
           color: white;
           padding: 0.7rem 1.2rem;
           font-weight: 900;
           letter-spacing: 0.12em;
           text-transform: uppercase;
           font-size: 0.7rem;
-          box-shadow: 0 8px 18px rgba(229, 37, 33, 0.22);
+          box-shadow: 0 8px 18px rgba(211, 173, 47, 0.28);
         }
 
         .hero-title {
@@ -126,10 +126,14 @@ export default function Hero() {
           font-weight: 900;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          background: linear-gradient(180deg, #ef2d29 0%, #d91818 100%);
+          background: linear-gradient(180deg, #e5c84d 0%, #b89420 100%);
           color: #fff;
           border: 1px solid rgba(255,255,255,0.12);
-          box-shadow: 0 10px 18px rgba(229, 37, 33, 0.22);
+          box-shadow: 0 10px 18px rgba(53, 40, 32, 0.28);
+        }
+
+        .hero-button:hover {
+          background: linear-gradient(180deg, #f0dc78 0%, #d3ad2f 100%);
         }
 
         .hero-art {
@@ -258,7 +262,7 @@ export default function Hero() {
               <div className="promo-code">
                 <Tag size={16} className="text-[#f5b84d]" />
                 <span>
-                  Usá el código: <strong>Sehola2026</strong>
+                  Usá el código: <strong>NIGDIZ2026</strong>
                 </span>
               </div>
 

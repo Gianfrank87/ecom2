@@ -1,7 +1,9 @@
-# AGENTS.MD - Estado del Proyecto Huellitas & Cía
+# AGENTS.MD - Estado del Proyecto NigDiz
 
 ## 📌 Resumen General
-**Huellitas & Cía** es una aplicación web de e-commerce de pet shop desarrollada con React (Vite) en el frontend y Node.js + Express + PostgreSQL en el backend.
+**NigDiz** es una aplicación web de e-commerce para mascotas desarrollada con React (Vite) en el frontend y Node.js + Express + PostgreSQL en el backend.
+
+> Estado actualizado: 2026-09-06. El proyecto conserva rutas, textos históricos y nombres internos de Huellitas en algunas áreas del código, pero la marca visible actual es NigDiz.
 
 ---
 
@@ -31,7 +33,7 @@
 1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
 2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
 3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `rol` (`cliente` | `admin`), `fecha_registro`
-4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `esperando_aprobacion` | `pago_rechazado` | `enviado` | `completado`), `metodo_pago` (`transferencia` | `efectivo` | `mercadopago`), `recargo_aplicado`, `comprobante_url` (privada)
+4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `esperando_aprobacion` | `pago_rechazado` | `pendiente_pago` | `aprobado` | `enviado` | `completado`), `metodo_pago` (`transferencia` | `efectivo` | `mercadopago`), `recargo_aplicado`, `comprobante_url` (privada)
 5. **`pedido_items`**: `id` (PK AUTO), `pedido_id`, `producto_id`, `oferta_id` (nullable), `cantidad`, `precio_unitario`
 6. **`mensajes`**: `id` (PK AUTO), `pedido_id`, `remitente` (`cliente` | `admin`), `contenido`, `fecha`, `leido`, `hilo_id`, `tipo` (`mensaje` | `sistema`), `cerrado`
 7. **`ofertas`**: `id` (PK AUTO), `nombre`, `producto_ids` (JSON Array), `descuento_o_precio_paquete`, `tipo_descuento` (`'precio_paquete'` | `'porcentaje'`), `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`
@@ -83,7 +85,7 @@
 - `DELETE /api/offers/:id` -> **Protegido Admin**
 
 ### Pedidos
-- `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos, aplica `total_base / 0.934` para MercadoPago, registra `recargo_aplicado`, inserta `pedido_items` y descuenta stock en una única transacción. Si `metodo_pago` es `mercadopago`, genera una Preferencia de Pago vía SDK con clave de idempotencia (`crypto.randomUUID()`) y devuelve el `init_point` -> Resp: `{ orderId, init_point, message }`
+- `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos y registra `recargo_aplicado`. Para transferencia/efectivo descuenta stock dentro de una única transacción; para Mercado Pago valida stock pero lo descuenta sólo al aprobarse el pago mediante webhook. Genera la Preferencia con clave de idempotencia y devuelve `{ orderId, init_point, message }`.
 - `POST /api/orders/:id/comprobante` -> **Protegido Cliente propietario** -> Recibe multipart con campo `comprobante`; acepta JPEG/PNG/PDF, máximo 5 MB, valida firma binaria y deja el pedido en `esperando_aprobacion`.
 - `GET /api/orders/:id/comprobante` -> **Protegido Cliente propietario o Admin** -> Sirve el archivo privado sólo después de validar autorización.
 - `PATCH /api/admin/orders/:id/approval` -> **Protegido Admin** -> Body `{ decision: 'approved' | 'rejected' }`; deja el pedido en `pendiente` o `pago_rechazado`.
@@ -97,15 +99,16 @@
 
 ---
 
-## 🎨 Sistema de Diseño y Dirección Visual (E-Commerce Pet Shop Real)
+## 🎨 Sistema de Diseño y Dirección Visual (NigDiz)
 
 - **Tipografía Principal**: `Plus Jakarta Sans` (Google Fonts, pesos 300 a 800) en sustitución de Inter/system-ui.
 - **Paleta de Colores Corporativa**:
-  - **Rojo E-Commerce Principal (CTA & Acentos)**: `#e52521` (Hover: `#c91d19`, Active: `#b01714`)
-  - **Navy / Slate Oscuro (Headers & Barra de Beneficios)**: `#0f172a` y `#1e293b`
-  - **Fondo de Página**: `#f8fafc` (Gris neutro ultra limpio sin sombras ni gradientes turbios)
-  - **Dorado / Amber Promocional**: `#f59e0b` y `#fbbf24`
-  - **Verde Beneficios / Stock**: `#10b981` y `#84cc16`
+  - **Dorado principal para CTA y acentos**: `#d3ad2f` (hover claro `#f0dc78`, activo `#b89420`)
+  - **Marrón oscuro para navegación y contraste**: `#352820`
+  - **Marrón medio/claro para jerarquía**: `#4b382b`, `#a78665`
+  - **Celeste para fondos y superficies**: `#6fb4d0` y la escala `primary-50..400`
+  - **Turquesa para estados positivos**: `#16b7c7` y la escala `sage-50..900`
+  - **Rojo de marca eliminado**: no usar rojo en CTA, enlaces, hover, focus, bordes ni gradientes. Los estados semánticos heredados `red-*` se remapean globalmente a dorados/marrones.
 - **Estilo Visual**:
   - Estructuras limpias y estructuradas con bordes de 1px (`border-gray-200`) y acentos de alto contraste en estado hover.
   - Eliminación total de esquinas curvas exageraas tipo "SaaS genérico" y gradientes violetas.
@@ -119,10 +122,10 @@
 - **`src/context/ClientAuthContext.jsx`**: Manejo global de la sesión única (JWT), usuario y `isAdmin`.
 - **`src/context/CartContext.jsx`**: Carrito de compras, cantidades y tostadas de notificación.
 - **`src/components/`**:
-  - `Navbar.jsx`: Barra superior de beneficios (Envíos Gratis, 10% OFF Transferencia, Opiniones 4.9/5, Entrega 24/48hs estilo MisPichos) + Buscador centralizado (estilo MiVetShop) + Carrito con badge flotante.
-  - `Hero.jsx`: Banner promocional de alto impacto con código de cupón de descuento destacado (`HUELLITAS10`) + Banner inferior de regalo de $10.000 (estilo MiVetShop).
+  - `Navbar.jsx`: Barra superior de beneficios, buscador centralizado, carrito con badge flotante y logo Cloudinary de NigDiz acompañado por texto de marca.
+  - `Hero.jsx`: Banner promocional con imagen de producto, badge y botón en la paleta dorado/marrón; no debe reintroducir rojo en hover ni gradientes.
   - `FeaturedCategories.jsx`: Grilla de tarjetas blancas circulares limpias con iconos y contador.
-  - `ProductCard.jsx`: Card retail con acento superior rojo, fotografía contenida, badges de variantes/peso (`1.5kg`, `3kg`, `7.5kg`), precio destacado y botón CTA rojo sólido "Comprar Ahora".
+  - `ProductCard.jsx`: Card retail con acento superior dorado/celeste, fotografía contenida, badges de variantes/peso (`1.5kg`, `3kg`, `7.5kg`), precio destacado y botón CTA dorado.
   - `OfertaCard.jsx`: Card de pack en oferta con badges de % OFF, ahorro destacado y botón de compra rápido.
   - `Footer.jsx`: Pie de página profesional con medios de pago aceptados (VISA, Mastercard, Mercado Pago, Transferencia), datos de contacto y derechos reservados.
 - **`src/pages/`**:
@@ -150,9 +153,9 @@
 9. ~~**Perfil de cliente / Mis Pedidos**: Menú desplegable en el Navbar (desktop + mobile) con "Mis Pedidos" y "Cerrar Sesión". Vista `/mis-pedidos` con historial de pedidos, estado, productos e imágenes.~~ (Completado)
 10. ~~**Fix badge de notificaciones de Ventas**: Badge ahora muestra cantidad real de pedidos en estado `pendiente` (no por timestamp). Tab Ventas tiene subvistas "No resueltos" (pendientes, por defecto) y "Resueltos" (enviados/completados). Se eliminó la lógica de `localStorage`/timestamp.~~ (Completado)
 11. ~~**Ordenamiento manual de productos (Drag & Drop en Admin y Web Pública)**: Campo `orden` en tabla productos, endpoint `PATCH /api/products/reorder`, drag & drop en Admin con `@dnd-kit/core`, y catálogo/home mostrando productos por defecto en base a `orden` (ascendente).~~ (Completado)
-12. ~~**Rediseño de Frontend estilo Pet Shop Real**: Integración de referencias de e-commerce reales de Argentina (MiVetShop, MisPichos, Timberline). Barra de beneficios superior, buscador centralizado, Hero promocional con cupones destacados, grilla de marcas oficiales, tarjetas de productos con variantes y botones CTA rojos de alto contraste, y tipografía `Plus Jakarta Sans` en toda la web.~~ (Completado)
+12. ~~**Rediseño de Frontend estilo Pet Shop Real**: Integración de referencias de e-commerce reales de Argentina (MiVetShop, MisPichos, Timberline). Barra de beneficios superior, buscador centralizado, Hero promocional con cupones destacados, grilla de marcas oficiales, tarjetas de productos con variantes y botones CTA en la paleta NigDiz dorado/marrón/celeste/turquesa, y tipografía `Plus Jakarta Sans` en toda la web.~~ (Completado)
 
-13. ~~**BUG CRÍTICO - Contraste de botones**: Auditoria completa de todos los botones e interacciones. Se reemplazaron clases de Tailwind que dependían de variables `@theme` (`bg-accent-500`, `bg-primary-500`, `bg-sage-500`) por valores hexadecimales directos (`#e52521`, `#0f172a`, `#059669`) en `Admin.jsx`, `Cart.jsx` y `Navbar.jsx`. El login de admin, tabs de navegación, botones de formulario y acciones del carrito ahora tienen contraste WCAG AA garantizado.~~ (Completado)
+13. ~~**BUG CRÍTICO - Contraste de botones**: Auditoría completa de todos los botones e interacciones. La paleta visible actual usa dorados y marrones con contraste alto; los selectores globales de `index.css` remapean utilidades heredadas y sus estados hover/focus para impedir que reaparezca el rojo.~~ (Completado)
 
 14. ~~**Buscador con autocompletado en Header**: `Navbar.jsx` precarga todos los productos al montar. Con debounce de 250ms filtra nombre, descripción y categoría. El desplegable muestra hasta 6 resultados con imagen, nombre, categoría y precio. Funciona en desktop (dropdown overlay) y mobile (lista dentro del drawer). Click en resultado navega directamente a `/product/:id`. Click fuera cierra el desplegable vía `ref` + `mousedown` listener.~~ (Completado)
 
@@ -171,7 +174,7 @@
 27. ~~**Cierre y reapertura de reclamos**: El Admin puede cerrar el hilo; se agrega un mensaje de sistema visible al cliente, se bloquea la escritura del hilo cerrado y el cliente puede abrir un reclamo nuevo para el mismo pedido sin mezclar conversaciones.~~ (Completado)
 28. ~~**Reapertura real de reclamos**: La reapertura usa un endpoint propio que crea un nuevo `hilo_id`, agrega el mensaje de sistema `[cliente] reabrió el reclamo` y deja el hilo escribible. El Admin puede volver a cerrarlo definitivamente desde el mismo chat.~~ (Completado)
 29. ~~**Indicador de cierre en Mensajes**: Cada hilo cerrado muestra el badge `Cerrado` en gris en el listado del panel Admin, diferenciándolo de los reclamos abiertos.~~ (Completado)
-30. ~~**Notificaciones visibles de mensajes**: El contador real de mensajes sin leer se muestra como una burbuja roja superpuesta fuera del botón/avatar de perfil, tanto para admin como para cliente, y se actualiza al marcar conversaciones como leídas.~~ (Completado)
+30. ~~**Notificaciones visibles de mensajes**: El contador real de mensajes sin leer se muestra como una burbuja superpuesta fuera del botón/avatar de perfil, tanto para admin como para cliente, y se actualiza al marcar conversaciones como leídas. La presentación respeta la paleta NigDiz.~~ (Completado)
 
 31. ~~**Endurecimiento previo a pagos**: Se eliminó el fallback conocido de `JWT_SECRET`; el backend no inicia sin un secreto de al menos 32 caracteres. Se agregó rate limiting a login/registro, se dejaron de exponer errores internos, el endpoint público ya no devuelve productos inactivos y los productos validan límites y URLs HTTPS.~~ (Completado)
 32. ~~**Retiro del production gate inseguro**: Se eliminó la contraseña fija del bundle del frontend. La protección de un entorno no público debe configurarse en la plataforma de despliegue o en el servidor.~~ (Completado)
@@ -194,16 +197,16 @@
 - Login y registro tienen rate limiting, y el backend no expone errores internos.
 - La contraseña fija del frontend fue eliminada; el acceso de entornos no públicos debe protegerse desde la plataforma.
 - La idempotencia de preferencias de MercadoPago se resolvió mediante `crypto.randomUUID()` en cada request al SDK.
-- Falta implementar el webhook de MercadoPago (`POST /api/webhooks/mercadopago`) con verificación criptográfica de firma para confirmar pagos automáticamente.
+- El webhook de Mercado Pago (`POST /api/webhooks/mercadopago`) ya existe y valida la firma criptográfica cuando `MP_WEBHOOK_SECRET` está configurado. Para producción, esa variable debe ser obligatoria y no debe permitirse el bypass que queda disponible para desarrollo.
 - Los comprobantes se guardan en `server/uploads/comprobantes`, se excluyen de Git y no deben servirse como archivos estáticos.
 - El almacenamiento local de Render es efímero; antes de producción los comprobantes deben migrarse a almacenamiento privado persistente (por ejemplo, bucket privado con URLs temporales).
 
 ## ✅ Fase 3 - Frontend de transferencias y seguimiento
 
-- El carrito muestra datos bancarios configurables mediante `VITE_TRANSFER_ALIAS`, `VITE_TRANSFER_CBU` y `VITE_TRANSFER_HOLDER`, y permite cargar el comprobante después de crear una transferencia.
+- El carrito muestra datos bancarios configurables desde la API y permite cargar el comprobante después de crear una transferencia.
 - `ClientOrders.jsx` muestra el stepper del pedido, permite cargar/corregir comprobantes rechazados y descarga comprobantes mediante el endpoint autenticado.
 - `Admin.jsx` muestra comprobantes pendientes de revisión y permite descargarlos, aprobarlos o rechazarlos.
-- Los valores `VITE_TRANSFER_*` son datos públicos de cobro; no deben contener secretos ni credenciales de plataforma.
+- No usar variables `VITE_TRANSFER_*`: los datos bancarios se administran mediante la tabla `configuraciones` y sus endpoints protegidos/públicos correspondientes.
 
 ## ✅ Fase 4 - Configuración bancaria dinámica
 

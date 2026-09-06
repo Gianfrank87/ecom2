@@ -2,43 +2,46 @@
 @import "tailwindcss";
 
 @theme {
-  --color-accent-50: #fef2f2;
-  --color-accent-100: #fee2e2;
-  --color-accent-200: #fecaca;
-  --color-accent-300: #fca5a5;
-  --color-accent-400: #f87171;
-  --color-accent-500: #e52521;
-  --color-accent-600: #c91d19;
-  --color-accent-700: #b01714;
-  --color-accent-800: #991b1b;
-  --color-accent-900: #7f1d1d;
+  --color-accent-50: #fff9e6;
+  --color-accent-100: #f9edb8;
+  --color-accent-200: #f0dc78;
+  --color-accent-300: #e5c84d;
+  --color-accent-400: #d8b437;
+  --color-accent-500: #d3ad2f;
+  --color-accent-600: #b89420;
+  --color-accent-700: #947516;
+  --color-accent-800: #705812;
+  --color-accent-900: #4e3d0d;
 
-  --color-primary-50: #f8fafc;
-  --color-primary-100: #f1f5f9;
-  --color-primary-200: #e2e8f0;
-  --color-primary-300: #cbd5e1;
-  --color-primary-400: #94a3b8;
-  --color-primary-500: #0f172a;
-  --color-primary-600: #1e293b;
-  --color-primary-700: #334155;
-  --color-primary-800: #475569;
-  --color-primary-900: #64748b;
+  --color-primary-50: #f4fbfd;
+  --color-primary-100: #e2f4f8;
+  --color-primary-200: #c5e8ef;
+  --color-primary-300: #9ed2df;
+  --color-primary-400: #6fb4d0;
+  --color-primary-500: #352820;
+  --color-primary-600: #4b382b;
+  --color-primary-700: #624a39;
+  --color-primary-800: #80624a;
+  --color-primary-900: #a78665;
 
-  --color-sage-50: #ecfdf5;
-  --color-sage-100: #d1fae5;
-  --color-sage-200: #a7f3d0;
-  --color-sage-300: #6ee7b7;
-  --color-sage-400: #34d399;
-  --color-sage-500: #059669;
-  --color-sage-600: #047857;
-  --color-sage-700: #065f46;
-  --color-sage-800: #064e3b;
-  --color-sage-900: #022c22;
+  --color-sage-50: #e8fbfd;
+  --color-sage-100: #c8f3f6;
+  --color-sage-200: #91e5eb;
+  --color-sage-300: #55d3dc;
+  --color-sage-400: #27c3d0;
+  --color-sage-500: #16b7c7;
+  --color-sage-600: #0e91a0;
+  --color-sage-700: #0b707b;
+  --color-sage-800: #0a5962;
+  --color-sage-900: #073b42;
 
-  --color-brand-red: #e52521;
-  --color-brand-dark: #0f172a;
-  --color-brand-navy: #1e293b;
-  --color-brand-amber: #f59e0b;
+  --color-brand-gold: #d3ad2f;
+  --color-brand-brown-dark: #352820;
+  --color-brand-brown: #a78665;
+  --color-brand-dark: #352820;
+  --color-brand-charcoal: #4b382b;
+  --color-brand-sky: #6fb4d0;
+  --color-brand-turquoise: #16b7c7;
 
   --font-display: 'Plus Jakarta Sans', sans-serif;
   --font-body: 'Plus Jakarta Sans', sans-serif;
@@ -48,14 +51,14 @@
 @layer base {
   body {
     font-family: var(--font-body);
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #f4fbfd;
+    color: #352820;
     -webkit-font-smoothing: antialiased;
   }
   
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
-    color: #0f172a;
+    color: #352820;
   }
 }
 
@@ -90,7 +93,7 @@
   margin-bottom: 0.25rem;
 }
 .err {
-  color: #ef4444;
+  color: #947516;
   font-size: 0.625rem;
   margin-top: 0.25rem;
 }
@@ -121,3 +124,42 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-sage-400);
 }
+
+/* Brand color compatibility for component-level utility classes. */
+[class~="bg-[#e52521]"] { background-color: #d3ad2f !important; }
+[class~="text-[#e52521]"] { color: #947516 !important; }
+[class~="border-[#e52521]"] { border-color: #d3ad2f !important; }
+[class~="accent-[#e52521]"] { accent-color: #d3ad2f !important; }
+[class~="bg-[#0f172a]"] { background-color: #352820 !important; }
+[class~="text-[#0f172a]"] { color: #352820 !important; }
+[class~="border-[#0f172a]"] { border-color: #352820 !important; }
+[class~="bg-[#1e293b]"] { background-color: #4b382b !important; }
+[class~="text-[#1e293b]"] { color: #4b382b !important; }
+[class~="hover\\:bg-[#c91d19]"]:hover { background-color: #b89420 !important; }
+[class~="hover\\:text-[#c91d19]"]:hover { color: #947516 !important; }
+[class~="active\\:bg-[#b01714]"]:active { background-color: #947516 !important; }
+
+/* Keep every legacy red utility inside the approved gold/brown palette. */
+[class*="bg-red-"] { background-color: #fff9e6 !important; }
+[class*="text-red-"] { color: #947516 !important; }
+[class*="border-red-"] { border-color: #e5c84d !important; }
+[class*="ring-red-"] { --tw-ring-color: #d8b437 !important; }
+[class*="accent-red-"] { accent-color: #d3ad2f !important; }
+[class*="from-red-"] { --tw-gradient-from: #d8b437 var(--tw-gradient-from-position) !important; }
+[class*="via-red-"] { --tw-gradient-to: rgb(229 200 77 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), #d8b437 var(--tw-gradient-via-position), var(--tw-gradient-to) !important; }
+[class*="to-red-"] { --tw-gradient-to: #947516 var(--tw-gradient-to-position) !important; }
+[class*="hover:bg-red-"]:hover { background-color: #f0dc78 !important; }
+[class*="hover:text-red-"]:hover { color: #705812 !important; }
+[class*="hover:border-red-"]:hover { border-color: #d8b437 !important; }
+[class*="focus:ring-red-"]:focus { --tw-ring-color: #d8b437 !important; }
+
+/* Also cover legacy arbitrary-value variants such as hover:bg-[#e52521]. */
+[class*="text-[#e52521]"] { color: #947516 !important; }
+[class*="border-[#e52521]"] { border-color: #d3ad2f !important; }
+[class*="accent-[#e52521]"] { accent-color: #d3ad2f !important; }
+[class*="bg-[#e52521]"] { background-color: #d3ad2f !important; }
+[class*="hover:bg-[#c91d19]"]:hover { background-color: #b89420 !important; }
+[class*="hover:text-[#c91d19]"]:hover { color: #705812 !important; }
+[class*="hover:border-[#e52521]"]:hover { border-color: #d8b437 !important; }
+[class*="focus:ring-[#e52521]"]:focus { --tw-ring-color: #d8b437 !important; }
+[class*="active:bg-[#b01714]"]:active { background-color: #947516 !important; }
