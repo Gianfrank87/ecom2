@@ -514,21 +514,50 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
 // DELETE /api/products/:id (protected)
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    const check = await dbGet('SELECT id, nombre FROM productos WHERE id = ?', [req.params.id]);
-    if (!check) return res.status(404).json({ error: 'Producto no encontrado' });
+    const productId = req.params.id;
     
-    try {
-      const deactivatedOffers = await deactivateOffersForProduct(check.id, check.nombre);
-      console.log(`Ofertas desactivadas al eliminar producto ${check.id}: ${deactivatedOffers}`);
-    } catch (offerErr) {
-      console.error('Error al desactivar ofertas:', offerErr);
-      // Continuar con la eliminación incluso si falla la desactivación de ofertas
+    // Verificar que el producto existe
+    const check = await dbGet('SELECT id FROM productos WHERE id = ?', [productId]);
+    if (!check) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
     }
     
-    await dbRun('DELETE FROM productos WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Producto eliminado exitosamente' });
+    // Intentar desactivar ofertas, pero no fallar si hay error
+    try {
+      const offers = await dbAll(
+        'SELECT id, producto_ids FROM ofertas WHERE activa = TRUE',
+        []
+      );
+      
+      for (const offer of offers) {
+        try {
+          const productIds = JSON.parse(offer.producto_ids || '[]');
+          if (Array.isArray(productIds) && productIds.map(String).includes(String(productId))) {
+            // Intentar actualizar, ignorar si falla
+            await dbRun(
+              'UPDATE ofertas SET activa = FALSE WHERE id = ?',
+              [offer.id]
+            ).catch(e => console.warn(`No se pudo desactivar oferta ${offer.id}:`, e.message));
+          }
+        } catch (e) {
+          console.warn(`Error procesando oferta ${offer.id}:`, e.message);
+        }
+      }
+    } catch (offerErr) {
+      console.warn('No se pudieron procesar ofertas:', offerErr.message);
+      // Continuar de todas formas
+    }
+    
+    // Eliminar el producto
+    const result = await dbRun('DELETE FROM productos WHERE id = ?', [productId]);
+    
+    if (result.rowCount > 0) {
+      res.json({ message: 'Producto eliminado exitosamente' });
+    } else {
+      res.status(404).json({ error: 'No se pudo eliminar el producto' });
+    }
   } catch (err) {
-    console.error('Error al eliminar producto:', err);
+    console.error('Error al eliminar producto:', err.message);
     internalError(res, err);
   }
 });
