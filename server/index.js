@@ -549,7 +549,7 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
     }
     
     // Eliminar el producto
-    const result = await dbRun('DELETE FROM productos WHERE id = ?', [productId]);
+    const result = await dbRun('UPDATE productos SET activo = false WHERE id = ?', [productId]);
     
     if (result.rowCount > 0) {
       res.json({ message: 'Producto eliminado exitosamente' });
