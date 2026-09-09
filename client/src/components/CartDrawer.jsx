@@ -211,7 +211,7 @@ export default function CartDrawer() {
                   }}
                 >
                   {/* Imagen */}
-                  {item.imagen_url && (
+                  {item.image && (
                     <div
                       style={{
                         width: '60px',
@@ -227,7 +227,7 @@ export default function CartDrawer() {
                       }}
                     >
                       <img
-                        src={item.imagen_url}
+                        src={item.image}
                         alt={item.name}
                         style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }}
                       />

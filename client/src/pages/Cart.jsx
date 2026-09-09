@@ -94,6 +94,11 @@ export default function Cart() {
     return errors;
   };
 
+  const validateStock = () => {
+    const outOfStockItems = cart.filter(item => !item.stock || item.stock === 0);
+    return outOfStockItems;
+  };
+
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     const errors = validateForm();
@@ -385,7 +390,15 @@ export default function Cart() {
                 if (!clientUser) {
                   navigate('/login', { state: { from: '/cart' } });
                 } else {
-                  setCheckoutStep('checkout');
+                  const outOfStock = validateStock();
+                  if (outOfStock.length > 0) {
+                    setApiError(`Los siguientes productos no tienen stock disponible: ${outOfStock.map(item => item.name).join(', ')}`);
+                    // Scroll to top to show the error
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  } else {
+                    setApiError('');
+                    setCheckoutStep('checkout');
+                  }
                 }
               }}
               className="w-full py-3.5 rounded-xl bg-[#e52521] hover:bg-[#c91d19] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center cursor-pointer"
