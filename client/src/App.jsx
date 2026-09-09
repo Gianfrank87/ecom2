@@ -4,6 +4,7 @@ import { CartProvider } from './context/CartContext';
 import { ClientAuthProvider } from './context/ClientAuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import CartDrawer from './components/CartDrawer';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
 import ProductDetail from './pages/ProductDetail';
@@ -20,6 +21,7 @@ export default function App() {
         <Router>
           <div className="flex flex-col min-h-screen">
             <Navbar />
+            <CartDrawer />
             <main className="flex-grow">
               <Routes>
                 <Route path="/" element={<Home />} />

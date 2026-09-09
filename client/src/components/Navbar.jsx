@@ -11,7 +11,7 @@ const formatPrice = (value) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value);
 
 export default function Navbar() {
-  const { getCartCount } = useCart();
+  const { getCartCount, toggleCartDrawer } = useCart();
   const { clientUser, clientToken, isAdmin, clientLogout } = useClientAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -443,16 +443,16 @@ export default function Navbar() {
             )}
 
             {/* Shopping Bag Button with Superscript Count */}
-            <Link
-              to="/cart"
-              className="relative p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors flex items-center"
-              aria-label="Ir al carrito"
+            <button
+              onClick={toggleCartDrawer}
+              className="relative p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors flex items-center cursor-pointer"
+              aria-label="Abrir carrito"
             >
               <ShoppingBag className="w-5 h-5 stroke-[1.5]" />
               <span className="absolute -top-1.5 -right-1 text-[11px] font-semibold text-gray-900 leading-none">
                 {getCartCount()}
               </span>
-            </Link>
+            </button>
 
             {/* Mobile Drawer Toggle */}
             <button

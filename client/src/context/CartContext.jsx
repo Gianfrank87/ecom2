@@ -22,6 +22,7 @@ export const CartProvider = ({ children }) => {
   });
 
   const [toast, setToast] = useState(null);
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -103,6 +104,10 @@ export const CartProvider = ({ children }) => {
     return cart.reduce((count, item) => count + item.quantity, 0);
   };
 
+  const openCartDrawer = () => setIsCartDrawerOpen(true);
+  const closeCartDrawer = () => setIsCartDrawerOpen(false);
+  const toggleCartDrawer = () => setIsCartDrawerOpen((prev) => !prev);
+
   return (
     <CartContext.Provider
       value={{
@@ -115,7 +120,11 @@ export const CartProvider = ({ children }) => {
         getCartTotal,
         getCartCount,
         toast,
-        showToast
+        showToast,
+        isCartDrawerOpen,
+        openCartDrawer,
+        closeCartDrawer,
+        toggleCartDrawer
       }}
     >
       {children}
