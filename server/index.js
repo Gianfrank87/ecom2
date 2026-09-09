@@ -531,7 +531,12 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
       
       for (const offer of offers) {
         try {
-          const productIds = JSON.parse(offer.producto_ids || '[]');
+          let productIds = [];
+    if (Array.isArray(offer.producto_ids)) {
+      productIds = offer.producto_ids;
+    } else if (typeof offer.producto_ids === 'string') {
+      productIds = JSON.parse(offer.producto_ids || '[]');
+    }
           if (Array.isArray(productIds) && productIds.map(String).includes(String(productId))) {
             // Intentar actualizar, ignorar si falla
             await dbRun(
