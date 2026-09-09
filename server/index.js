@@ -206,23 +206,33 @@ const mapOffer = async (o) => {
 };
 
 const deactivateOffersForProduct = async (productId, productName, query = { all: dbAll, run: dbRun }) => {
-  const offers = await query.all('SELECT id, producto_ids FROM ofertas WHERE activa = TRUE');
-  const affectedOffers = offers.filter((offer) => {
-    const productIds = JSON.parse(offer.producto_ids || '[]').map(String);
-    return productIds.includes(String(productId));
-  });
+  try {
+    const offers = await query.all('SELECT id, producto_ids FROM ofertas WHERE activa = TRUE');
+    const affectedOffers = offers.filter((offer) => {
+      try {
+        const productIds = JSON.parse(offer.producto_ids || '[]').map(String);
+        return productIds.includes(String(productId));
+      } catch (e) {
+        console.warn(`Advertencia: producto_ids inválido en oferta ${offer.id}:`, offer.producto_ids);
+        return false;
+      }
+    });
 
-  for (const offer of affectedOffers) {
-    await query.run(
-      `UPDATE ofertas
-       SET activa = FALSE, desactivada_por_stock = TRUE,
-           producto_sin_stock_id = ?, producto_sin_stock_nombre = ?
-       WHERE id = ?`,
-      [productId, productName, offer.id]
-    );
+    for (const offer of affectedOffers) {
+      await query.run(
+        `UPDATE ofertas
+         SET activa = FALSE, desactivada_por_stock = TRUE,
+             producto_sin_stock_id = ?, producto_sin_stock_nombre = ?
+         WHERE id = ?`,
+        [productId, productName, offer.id]
+      );
+    }
+
+    return affectedOffers.length;
+  } catch (err) {
+    console.error('Error en deactivateOffersForProduct:', err);
+    throw err;
   }
-
-  return affectedOffers.length;
 };
 
 const getTrustedOrderLines = async (items, query = { get: dbGet, all: dbAll }) => {
@@ -506,11 +516,20 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     const check = await dbGet('SELECT id, nombre FROM productos WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Producto no encontrado' });
-    const deactivatedOffers = await deactivateOffersForProduct(check.id, check.nombre);
+    
+    try {
+      const deactivatedOffers = await deactivateOffersForProduct(check.id, check.nombre);
+      console.log(`Ofertas desactivadas al eliminar producto ${check.id}: ${deactivatedOffers}`);
+    } catch (offerErr) {
+      console.error('Error al desactivar ofertas:', offerErr);
+      // Continuar con la eliminación incluso si falla la desactivación de ofertas
+    }
+    
     await dbRun('DELETE FROM productos WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Producto eliminado exitosamente', deactivatedOffers });
+    res.json({ message: 'Producto eliminado exitosamente' });
   } catch (err) {
-    internalError(res);
+    console.error('Error al eliminar producto:', err);
+    internalError(res, err);
   }
 });
 
