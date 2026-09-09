@@ -34,12 +34,14 @@ function ProductCard({ product }) {
     <div className="w-full shrink-0 grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center px-2 sm:px-4">
 
       {/* ── Image ── */}
-      <div className="bg-white shadow-xs border border-[#cca32b]/30 p-6 sm:p-8 flex items-center justify-center aspect-square w-full max-w-md mx-auto">
-        <img
-          src={product.image}
-          alt={product.name}
-          className="w-full h-full object-contain"
-        />
+      <div className="flex items-center justify-center w-full max-w-md mx-auto">
+        <div className="bg-gradient-to-br from-[#f8f6f0] to-[#f0ede5] shadow-lg hover:shadow-2xl border-2 border-[#d3ad2f]/40 hover:border-[#d3ad2f]/80 p-8 sm:p-10 flex items-center justify-center aspect-square w-full rounded-2xl transition-all duration-300 transform hover:scale-105 group">
+          <img
+            src={product.image}
+            alt={product.name}
+            className="w-full h-full object-contain drop-shadow-sm group-hover:drop-shadow-md transition-all duration-300"
+          />
+        </div>
       </div>
 
       {/* ── Details ── */}
@@ -134,6 +136,7 @@ export default function FeaturedProductSection() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(0);
+  const [autoRotate, setAutoRotate] = useState(true);
 
   // Load featured products from API
   useEffect(() => {
@@ -152,6 +155,17 @@ export default function FeaturedProductSection() {
 
     loadFeaturedProducts();
   }, []);
+
+  // Auto-rotate carousel every 5 seconds
+  useEffect(() => {
+    if (!autoRotate || featuredProducts.length === 0) return;
+
+    const interval = setInterval(() => {
+      setCurrent((c) => (c + 1) % featuredProducts.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [autoRotate, featuredProducts.length]);
 
   // If no featured products, don't render section
   if (loading) return null;
@@ -173,30 +187,9 @@ export default function FeaturedProductSection() {
           <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#352820]/60">
             Producto Destacado
           </span>
-          <div className="flex items-center justify-center gap-3 mt-1">
-            <h2 className="text-xl sm:text-2xl font-extrabold text-[#352820] tracking-tight">
-              {featuredProducts[current].name}
-            </h2>
-            {/* Navigation arrows — only show if more than one product */}
-            {total > 1 && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={prev}
-                  className="w-7 h-7 flex items-center justify-center bg-[#352820]/10 hover:bg-[#352820]/20 text-[#352820] transition-colors cursor-pointer"
-                  aria-label="Producto anterior"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={next}
-                  className="w-7 h-7 flex items-center justify-center bg-[#352820]/10 hover:bg-[#352820]/20 text-[#352820] transition-colors cursor-pointer"
-                  aria-label="Producto siguiente"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-[#352820] tracking-tight mt-2">
+            {featuredProducts[current].name}
+          </h2>
           
           {/* Dots indicator */}
           {total > 1 && (
@@ -215,16 +208,49 @@ export default function FeaturedProductSection() {
           )}
         </div>
 
-        {/* ── Carousel viewport ── */}
-        <div className="overflow-hidden">
-          <div
-            className="flex transition-transform duration-500 ease-in-out"
-            style={{ transform: `translateX(-${current * 100}%)` }}
-          >
-            {featuredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+        {/* ── Carousel viewport with side arrows ── */}
+        <div className="flex items-center justify-between gap-3 sm:gap-6">
+          {/* Left arrow */}
+          {total > 1 && (
+            <button
+              onClick={() => {
+                prev();
+                setAutoRotate(false);
+                setTimeout(() => setAutoRotate(true), 10000);
+              }}
+              className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[#352820] hover:bg-[#4b382b] text-white transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-md"
+              aria-label="Producto anterior"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Carousel content */}
+          <div className="overflow-hidden flex-1">
+            <div
+              className="flex transition-transform duration-500 ease-in-out"
+              style={{ transform: `translateX(-${current * 100}%)` }}
+            >
+              {featuredProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
           </div>
+
+          {/* Right arrow */}
+          {total > 1 && (
+            <button
+              onClick={() => {
+                next();
+                setAutoRotate(false);
+                setTimeout(() => setAutoRotate(true), 10000);
+              }}
+              className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[#352820] hover:bg-[#4b382b] text-white transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-md"
+              aria-label="Producto siguiente"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
         </div>
 
       </div>

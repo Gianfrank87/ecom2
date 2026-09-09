@@ -47,16 +47,16 @@ export default function OfertaCard({ offer }) {
   };
 
   return (
-    <div className="bg-white rounded-xl border-2 border-[#e52521] shadow-sm hover:shadow-md transition-all duration-200 p-5 flex flex-col justify-between relative overflow-hidden text-left group">
+    <div className="bg-white rounded-xl border-2 border-[#d3ad2f]/40 shadow-md hover:shadow-lg transition-all duration-300 p-5 flex flex-col justify-between relative overflow-hidden text-left group hover:border-[#d3ad2f]/80">
       
       {/* Top Banner Header */}
       <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="inline-flex items-center gap-1 bg-[#e52521] text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded">
+        <span className="inline-flex items-center gap-1 bg-[#d3ad2f] text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md">
           <Flame className="w-3 h-3" />
           PACK OFERTA
         </span>
         {savingsPercent > 0 && (
-          <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+          <span className="text-xs font-black text-white bg-[#d3ad2f] px-2 py-0.5 rounded-md border border-[#d3ad2f]/50">
             -{savingsPercent}% OFF
           </span>
         )}
@@ -64,7 +64,7 @@ export default function OfertaCard({ offer }) {
 
       <div>
         {/* Offer Title */}
-        <h3 className="font-extrabold text-base text-gray-900 mb-3 line-clamp-2 leading-snug group-hover:text-[#e52521] transition-colors">
+        <h3 className="font-extrabold text-base text-gray-900 mb-3 line-clamp-2 leading-snug group-hover:text-[#d3ad2f] transition-colors">
           {nombre}
         </h3>
 
@@ -73,13 +73,13 @@ export default function OfertaCard({ offer }) {
           {products.map((p, i) => (
             <React.Fragment key={p.id}>
               <Link to={`/product/${p.id}`} className="group/thumb flex flex-col items-center">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 p-1 group-hover/thumb:border-[#e52521] transition-all">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border-2 border-[#d3ad2f]/40 bg-gradient-to-br from-[#faf9f6] to-[#f3f0eb] p-1.5 group-hover/thumb:border-[#d3ad2f] group-hover/thumb:shadow-md transition-all transform group-hover/thumb:scale-110">
                   <img src={p.image} alt={p.name} className="w-full h-full object-contain" />
                 </div>
-                <span className="text-[9px] text-gray-500 mt-1 font-bold max-w-[60px] text-center line-clamp-1">{p.name}</span>
+                <span className="text-[9px] text-gray-600 mt-1 font-bold max-w-[60px] text-center line-clamp-1">{p.name}</span>
               </Link>
               {i < products.length - 1 && (
-                <span className="text-red-500 font-black text-base">+</span>
+                <span className="text-[#d3ad2f] font-black text-base">+</span>
               )}
             </React.Fragment>
           ))}
@@ -95,12 +95,12 @@ export default function OfertaCard({ offer }) {
                 {formatPrice(originalTotal)}
               </span>
             )}
-            <span className="font-black text-xl sm:text-2xl text-gray-900 tracking-tight">
+            <span className="font-black text-xl sm:text-2xl text-[#352820] tracking-tight">
               {formatPrice(offerPrice)}
             </span>
           </div>
           {savings > 0 && (
-            <span className="text-[10px] text-emerald-700 font-extrabold bg-emerald-50 px-2 py-1 rounded border border-emerald-200 text-right">
+            <span className="text-[10px] text-white font-extrabold bg-[#d3ad2f] px-2 py-1 rounded-md border border-[#d3ad2f]/50 text-right">
               Ahorrás {formatPrice(savings)}
             </span>
           )}
@@ -108,7 +108,7 @@ export default function OfertaCard({ offer }) {
 
         <button
           onClick={handleAddAll}
-          className="w-full py-2.5 px-3 bg-[#e52521] hover:bg-[#c91d19] active:bg-[#b01714] text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full py-2.5 px-3 bg-[#352820] hover:bg-[#4b382b] active:bg-[#5a4a37] text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer transform hover:scale-105 active:scale-95"
         >
           <ShoppingCart className="w-4 h-4" />
           Agregar Pack al Carrito
