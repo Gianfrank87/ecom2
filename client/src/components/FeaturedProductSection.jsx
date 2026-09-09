@@ -1,48 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { api } from '../services/api';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FEATURED PRODUCTS DATA
-// In the future this list can be fetched from the backend (e.g. GET /api/products?destacado=true)
-// and passed as a prop or via context. For now it's hardcoded with one item.
-// ─────────────────────────────────────────────────────────────────────────────
-const FEATURED_PRODUCTS = [
-  {
-    id: 'arnes-luminoso',
-    slug: 'arnes-luminoso',
-    name: 'Arnés Luminoso',
-    category: 'Arnés',
-    tagline: 'Cuidá a quien más te ama. Dale seguridad en sus paseos nocturnos',
-    price: 68000,
-    priceLabel: '$68.000,00',
-    discount: '10% de descuento pagando con Transferencia',
-    description:
-      'Iluminación LED de alta visibilidad 360° para paseos nocturnos seguros. Batería recargable vía USB y correas ajustables reforzadas para máxima comodidad.',
-    image: 'https://res.cloudinary.com/dl3t6vykm/image/upload/v1788907676/arns_transpa_jyyzwd.png',
-    sizes: ['S', 'M', 'L', 'XL'],
-    catalogSearch: 'Arnes',
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SINGLE PRODUCT CARD
+// SINGLE PRODUCT CARD — uses real data from database
 // ─────────────────────────────────────────────────────────────────────────────
 function ProductCard({ product }) {
   const { addToCart } = useCart();
-  const [selectedSize, setSelectedSize] = useState(product.sizes[0]);
   const [quantity, setQuantity] = useState(1);
 
   const handleAddToCart = () => {
     addToCart({
-      id: `${product.id}-${selectedSize.toLowerCase()}`,
-      name: `${product.name} (Talle ${selectedSize})`,
+      id: product.id,
+      name: product.name,
       price: product.price,
       image: product.image,
-      stock: 50,
+      stock: product.stock,
       category: product.category,
     }, quantity);
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      minimumFractionDigits: 2,
+    }).format(price / 100);
   };
 
   return (
@@ -71,39 +56,21 @@ function ProductCard({ product }) {
 
         {/* Price */}
         <p className="text-xl font-bold text-[#352820] mt-2">
-          {product.priceLabel}
+          {formatPrice(product.price)}
         </p>
-        <p className="text-xs font-medium text-[#352820]/70 mt-0.5">
-          {product.discount}
+
+        {/* Stock */}
+        <p className={`text-xs font-medium mt-0.5 ${product.stock > 0 ? 'text-green-700' : 'text-red-600'}`}>
+          {product.stock > 0 ? `${product.stock} disponibles` : 'Sin stock'}
         </p>
 
         {/* Divider */}
         <div className="h-px bg-[#cca32b]/30 my-5" />
 
-        {/* Size Selector */}
-        {product.sizes.length > 0 && (
-          <div className="mb-5">
-            <p className="text-xs font-bold text-[#352820] mb-2 uppercase tracking-wide">
-              Talle: <span className="font-extrabold">{selectedSize}</span>
-            </p>
-            <div className="flex items-center gap-2">
-              {product.sizes.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => setSelectedSize(size)}
-                  className={`w-11 h-11 font-bold text-sm flex items-center justify-center transition-all cursor-pointer border ${
-                    selectedSize === size
-                      ? 'bg-[#352820] text-white border-[#352820]'
-                      : 'bg-transparent text-[#352820] border-[#352820]/60 hover:bg-[#352820]/10'
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Description */}
+        <p className="text-xs text-[#352820]/70 leading-relaxed mb-5">
+          {product.description}
+        </p>
 
         {/* Qty + Add to cart — full-width row */}
         <div className="flex items-stretch gap-0 w-full">
@@ -134,24 +101,24 @@ function ProductCard({ product }) {
           <button
             type="button"
             onClick={handleAddToCart}
-            className="flex-1 h-11 bg-[#352820] hover:bg-[#4b382b] text-white font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer flex items-center justify-center border border-[#352820]"
+            disabled={product.stock <= 0}
+            className={`flex-1 h-11 font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer flex items-center justify-center border ${
+              product.stock > 0
+                ? 'bg-[#352820] hover:bg-[#4b382b] text-white border-[#352820]'
+                : 'bg-gray-300 text-gray-500 border-gray-300 cursor-not-allowed'
+            }`}
           >
-            Agregar al carrito
+            {product.stock > 0 ? 'Agregar al carrito' : 'Sin stock'}
           </button>
         </div>
 
-        {/* Description */}
-        <p className="text-xs text-[#352820]/70 leading-relaxed mt-5">
-          {product.description}
-        </p>
-
-        {/* See all link */}
+        {/* See more link */}
         <div className="mt-4">
           <Link
-            to={`/catalog?search=${product.catalogSearch}`}
+            to={`/product/${product.id}`}
             className="text-xs font-semibold text-[#352820] underline underline-offset-2 hover:text-[#d3ad2f] transition-colors"
           >
-            Ver todos los {product.name}s →
+            Ver más detalles →
           </Link>
         </div>
       </div>
@@ -161,11 +128,36 @@ function ProductCard({ product }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SECTION — horizontal scroll carousel
+// Loads featured products dynamically from the API
 // ─────────────────────────────────────────────────────────────────────────────
 export default function FeaturedProductSection() {
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(0);
-  const total = FEATURED_PRODUCTS.length;
 
+  // Load featured products from API
+  useEffect(() => {
+    const loadFeaturedProducts = async () => {
+      try {
+        const products = await api.getProducts();
+        const featured = products.filter((p) => p.featured === true);
+        setFeaturedProducts(featured);
+      } catch (error) {
+        console.error('Error loading featured products:', error);
+        setFeaturedProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFeaturedProducts();
+  }, []);
+
+  // If no featured products, don't render section
+  if (loading) return null;
+  if (featuredProducts.length === 0) return null;
+
+  const total = featuredProducts.length;
   const prev = () => setCurrent((c) => (c - 1 + total) % total);
   const next = () => setCurrent((c) => (c + 1) % total);
 
@@ -183,7 +175,7 @@ export default function FeaturedProductSection() {
           </span>
           <div className="flex items-center justify-center gap-3 mt-1">
             <h2 className="text-xl sm:text-2xl font-extrabold text-[#352820] tracking-tight">
-              {FEATURED_PRODUCTS[current].name}
+              {featuredProducts[current].name}
             </h2>
             {/* Navigation arrows — only show if more than one product */}
             {total > 1 && (
@@ -205,13 +197,11 @@ export default function FeaturedProductSection() {
               </div>
             )}
           </div>
-          <p className="text-sm font-medium italic text-[#352820]/80 mt-1">
-            {FEATURED_PRODUCTS[current].tagline}
-          </p>
+          
           {/* Dots indicator */}
           {total > 1 && (
             <div className="flex justify-center gap-1.5 mt-3">
-              {FEATURED_PRODUCTS.map((_, i) => (
+              {featuredProducts.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setCurrent(i)}
@@ -231,7 +221,7 @@ export default function FeaturedProductSection() {
             className="flex transition-transform duration-500 ease-in-out"
             style={{ transform: `translateX(-${current * 100}%)` }}
           >
-            {FEATURED_PRODUCTS.map((product) => (
+            {featuredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
