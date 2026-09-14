@@ -19,6 +19,7 @@ export default function Catalog() {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [activeOffers, setActiveOffers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,13 +28,13 @@ export default function Catalog() {
 
   // Read products from database
   useEffect(() => {
-    api.getProducts()
-      .then(setProducts)
-      .catch((err) => console.error('Error al cargar productos en catálogo:', err));
-
-    api.getActiveOffers()
-      .then(setActiveOffers)
-      .catch((err) => console.error('Error al cargar ofertas:', err));
+    setLoading(true);
+    Promise.all([
+      api.getProducts().then(setProducts).catch((err) => console.error('Error al cargar productos en catálogo:', err)),
+      api.getActiveOffers().then(setActiveOffers).catch((err) => console.error('Error al cargar ofertas:', err))
+    ]).finally(() => {
+      setLoading(false);
+    });
   }, []);
 
   // Update selected category and search term if URL parameter changes
@@ -204,7 +205,12 @@ export default function Catalog() {
 
       {/* ─── Grilla de Productos Con Esquinas Cuadradas sobre Fondo Dorado ─── */}
       <div className="max-w-7xl mx-auto">
-        {filteredProducts.length > 0 ? (
+        {loading ? (
+          <div className="bg-white rounded-none border border-[#352820]/30 p-12 text-center max-w-md mx-auto my-8 shadow-xs">
+            <div className="inline-block animate-spin w-8 h-8 border-4 border-[#352820]/20 border-t-[#352820] mb-3" />
+            <p className="text-xs font-black uppercase tracking-wider text-[#352820]">Cargando catálogo...</p>
+          </div>
+        ) : filteredProducts.length > 0 ? (
           <div>
             <div className="flex justify-between items-center mb-4 text-xs font-extrabold text-[#352820]">
               <span>Mostrando {filteredProducts.length} productos</span>
