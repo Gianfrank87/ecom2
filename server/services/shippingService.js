@@ -7,8 +7,9 @@
 
 export const LOCALITIES = [
   // Entre Ríos - Origen y cercanas
-  { id: 1, localidad: 'Gualeguaychú', provincia: 'Entre Ríos', cp: '2820', zona: 'local', precio: 3500 },
+  { id: 1, localidad: 'Gualeguaychú', provincia: 'Entre Ríos', cp: '2820', zona: 'local', precio: 0 },
   { id: 2, localidad: 'Pueblo General Belgrano', provincia: 'Entre Ríos', cp: '2821', zona: 'er_cercano', precio: 4500 },
+
   { id: 3, localidad: 'Larroque', provincia: 'Entre Ríos', cp: '2854', zona: 'er_cercano', precio: 5500 },
   { id: 4, localidad: 'Aldea San Antonio', provincia: 'Entre Ríos', cp: '2855', zona: 'er_cercano', precio: 5500 },
   { id: 5, localidad: 'Concepción del Uruguay', provincia: 'Entre Ríos', cp: '3260', zona: 'er_cercano', precio: 6500 },
@@ -109,10 +110,12 @@ export const calculateShippingQuote = (destinationId) => {
       cp: '2820',
     },
     price: found.precio,
-    formattedPrice: new Intl.NumberFormat('es-AR', {
+    isFree: found.precio === 0,
+    formattedPrice: found.precio === 0 ? '¡Gratis!' : new Intl.NumberFormat('es-AR', {
       style: 'currency',
       currency: 'ARS',
       minimumFractionDigits: 0,
     }).format(found.precio),
+
   };
 };

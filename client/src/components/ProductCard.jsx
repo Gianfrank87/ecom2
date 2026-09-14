@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext';
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
 
-  // Helper to format currency
+  // Helper para formatear moneda (estilo $ 68.000,00)
   const formatPrice = (value) => {
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
@@ -21,115 +21,95 @@ export default function ProductCard({ product }) {
     addToCart(product, 1);
   };
 
-  // Chips de variantes estructuradas (estilo MiVetShop)
-  const getVariantChips = (category) => {
+  // Variantes/presentación (ej: "2 colores", "1.5kg")
+  const getVariantLabel = (category) => {
     const cat = category?.toLowerCase();
-    if (cat === 'alimentos') return ['1.5kg', '3kg', '7.5kg', '15kg'];
-    if (cat === 'collares' || cat === 'correas') return ['Talle S', 'Talle M', 'Talle L'];
-    return ['1 unidad', 'Pack x2'];
+    if (cat === 'alimentos') return 'Varias presentaciones';
+    if (cat === 'collares' || cat === 'correas') return '2 colores';
+    return '1 unidad';
   };
 
-  const variantChips = getVariantChips(product.category);
+  const variantLabel = getVariantLabel(product.category);
+  const isOutOfStock = Number(product.stock) <= 0;
 
   return (
     <Link
       to={`/product/${product.id}`}
-      className="group bg-white rounded-xl border border-gray-200 hover:border-amber-500 hover:shadow-md transition-all duration-200 flex flex-col justify-between relative overflow-hidden text-left"
+      className="group bg-white rounded-none border border-[#352820]/20 hover:border-[#352820] shadow-sm hover:shadow-xl transition-all duration-200 flex flex-col justify-between overflow-hidden text-left relative"
     >
-      {/* Accent Top Border */}
-      <div className="h-1 bg-gradient-to-r from-amber-600 via-amber-500 to-cyan-400 w-full" />
-
-      {/* Frame de Imagen */}
-      <div className="relative aspect-square bg-gray-50 p-4 flex items-center justify-center border-b border-gray-100 overflow-hidden">
-        {/* Badges superiores */}
-        <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1">
-          <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded bg-slate-900 text-white shadow-sm">
-            {product.category}
-          </span>
-          {product.featured && (
-            <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded bg-amber-400 text-amber-950 shadow-sm flex items-center gap-1">
-              ⭐ Destacado
+      {/* Frame de Imagen Cuadrado Blanco (Esquinas 100% cuadradas como en la captura) */}
+      <div className="relative aspect-square bg-white p-4 flex items-center justify-center border-b border-gray-200 overflow-hidden">
+        
+        {/* Badge "Sin stock" rectangular negro con texto amarillo en la esquina superior izquierda */}
+        {isOutOfStock && (
+          <div className="absolute top-2 left-2 z-20">
+            <span className="font-extrabold text-[10px] uppercase tracking-wider text-[#f0dc78] bg-black px-2.5 py-1 rounded-none shadow-sm">
+              Sin stock
             </span>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Destacado si tiene stock */}
+        {!isOutOfStock && product.featured && (
+          <div className="absolute top-2 left-2 z-10">
+            <span className="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 rounded-none bg-[#352820] text-[#f0dc78] shadow-xs">
+              Destacado
+            </span>
+          </div>
+        )}
 
         {/* Fotografía de producto */}
         <img
           src={product.image}
           alt={product.name}
-          className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+          className={`w-full h-full object-contain transition-transform duration-300 group-hover:scale-105 ${
+            isOutOfStock ? 'opacity-60 grayscale-[20%]' : ''
+          }`}
           loading="lazy"
         />
-
-        {/* Overlay sin stock */}
-        {product.stock <= 0 && (
-          <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-[1px] flex items-center justify-center z-10">
-            <span className="font-extrabold text-xs uppercase tracking-widest text-white bg-amber-600 px-3 py-1.5 rounded-md shadow-md">
-              Sin Stock
-            </span>
-          </div>
-        )}
       </div>
 
-      {/* Contenido de Info */}
-      <div className="p-4 flex-grow flex flex-col justify-between">
+      {/* Contenido e Información */}
+      <div className="p-4 flex-grow flex flex-col justify-between space-y-3">
         <div>
-          {/* Subtítulo de categoría/marca */}
-          <span className="text-[11px] font-black text-amber-700 uppercase tracking-widest block mb-1">
-            {product.category || 'Huellitas'}
-          </span>
-
           {/* Título de producto */}
-          <h3 className="font-bold text-sm sm:text-base text-gray-900 line-clamp-2 leading-snug group-hover:text-amber-700 transition-colors mb-2 min-h-[2.5rem]">
+          <h3 className="font-extrabold text-sm sm:text-base text-[#352820] line-clamp-2 leading-snug group-hover:text-[#d8b538] transition-colors mb-1 min-h-[2.5rem]">
             {product.name}
           </h3>
 
-          {/* Badges de variantes de peso / presentación */}
-          <div className="flex flex-wrap gap-1 mb-3">
-            {variantChips.slice(0, 3).map((chip, idx) => (
-              <span
-                key={idx}
-                className="text-[10px] font-bold text-gray-600 bg-gray-100 hover:bg-amber-50 hover:text-amber-700 border border-gray-200 rounded px-1.5 py-0.5 transition-colors"
-              >
-                {chip}
-              </span>
-            ))}
-            {variantChips.length > 3 && (
-              <span className="text-[10px] font-bold text-gray-400 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">
-                +{variantChips.length - 3}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Sección de Precio y Botón CTA */}
-        <div className="pt-2 border-t border-gray-100 mt-auto">
-          <div className="flex items-baseline justify-between mb-2">
-            <div>
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Precio online</span>
-              <span className="font-black text-lg sm:text-xl text-gray-900 tracking-tight">
-                {formatPrice(product.price)}
-              </span>
-            </div>
-            {product.stock > 0 && (
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+          {/* Precio (Estilo $68.000,00) */}
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="font-black text-lg sm:text-xl text-[#352820] tracking-tight">
+              {formatPrice(product.price)}
+            </span>
+            {!isOutOfStock && (
+              <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-none border border-emerald-200 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" /> En stock
               </span>
             )}
           </div>
 
-          {/* Botón CTA sólido de alto contraste */}
-          {product.stock > 0 ? (
+          {/* Subtítulo de variante (ej: "2 colores") */}
+          <span className="text-xs text-gray-500 font-medium block mt-1">
+            {variantLabel}
+          </span>
+        </div>
+
+        {/* Botón CTA Cuadrado Corporativo */}
+        <div className="pt-2 border-t border-gray-100 mt-auto">
+          {!isOutOfStock ? (
             <button
+              type="button"
               onClick={handleQuickAdd}
-              className="w-full py-2.5 px-3 bg-[#e52521] hover:bg-[#c91d19] active:bg-[#b01714] text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 px-3 bg-[#352820] hover:bg-[#4b382b] active:bg-[#251b15] text-[#f0dc78] font-black text-xs uppercase tracking-wider rounded-none shadow-xs hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <ShoppingCart className="w-4 h-4" /> Comprar Ahora
+              <ShoppingCart className="w-4 h-4 text-[#d8b538]" /> Comprar Ahora
             </button>
           ) : (
             <button
+              type="button"
               disabled
-              className="w-full py-2.5 px-3 bg-gray-100 text-gray-400 font-bold text-xs uppercase tracking-wider rounded-lg cursor-not-allowed text-center"
+              className="w-full py-2.5 px-3 bg-gray-100 text-gray-400 font-bold text-xs uppercase tracking-wider rounded-none cursor-not-allowed text-center border border-gray-200"
             >
               Sin Stock
             </button>

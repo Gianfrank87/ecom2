@@ -138,14 +138,16 @@ export default function Cart() {
 
   const validateForm = () => {
     const errors = {};
-    if (!formData.name.trim()) errors.name = 'El nombre es obligatorio.';
-    if (!formData.email.trim()) {
+    if (!formData.name || !formData.name.trim()) errors.name = 'El nombre completo es obligatorio.';
+    if (!formData.email || !formData.email.trim()) {
       errors.email = 'El correo electrónico es obligatorio.';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       errors.email = 'El formato del correo es inválido.';
     }
-    if (!formData.phone.trim()) errors.phone = 'El teléfono es obligatorio.';
-    if (!formData.address.trim()) errors.address = 'La dirección de entrega es obligatoria.';
+    if (!formData.phone || !formData.phone.trim()) errors.phone = 'El teléfono es obligatorio.';
+    if (!formData.address || !formData.address.trim() || formData.address.trim().length < 3) {
+      errors.address = 'La dirección de entrega es obligatoria. Por favor ingresá calle y altura.';
+    }
     return errors;
   };
 
@@ -159,8 +161,10 @@ export default function Cart() {
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
+      setApiError('Ingresá tu dirección de entrega obligatoria antes de finalizar la compra.');
       return;
     }
+
 
     setCheckoutLoading(true);
     setApiError('');
@@ -413,8 +417,8 @@ export default function Cart() {
                   <Truck className="w-4 h-4 text-[#352820]" /> Costo de envío
                 </span>
                 {shippingQuote ? (
-                  <span className="text-emerald-700 font-black text-sm">
-                    {formatPrice(shippingQuote.price)}
+                  <span className="text-emerald-700 font-black text-sm uppercase tracking-wider">
+                    {shippingQuote.price === 0 ? '¡Gratis!' : formatPrice(shippingQuote.price)}
                   </span>
                 ) : (
                   <span className="text-gray-400 font-semibold italic text-[11px]">
@@ -446,10 +450,13 @@ export default function Cart() {
                       <span className="font-black text-gray-900 block">
                         Envío a {shippingQuote.destination.localidad}, {shippingQuote.destination.provincia}
                       </span>
-                      <span className="text-[10px] text-gray-500 font-medium">
-                        Salida: Gualeguaychú, Entre Ríos {shippingQuote.destination.cp ? `(CP ${shippingQuote.destination.cp})` : ''}
+                      <span className="text-[10px] text-emerald-700 font-extrabold block">
+                        {shippingQuote.price === 0
+                          ? '¡Envío local GRATIS en Gualeguaychú!'
+                          : `Salida: Gualeguaychú, Entre Ríos ${shippingQuote.destination.cp ? `(CP ${shippingQuote.destination.cp})` : ''}`}
                       </span>
                     </div>
+
                     <button
                       type="button"
                       onClick={handleResetShipping}
@@ -691,10 +698,11 @@ export default function Cart() {
                 <button
                   type="submit"
                   disabled={checkoutLoading || isRedirecting}
-                  className="w-2/3 py-3 rounded-lg bg-[#e52521] hover:bg-[#c91d19] disabled:bg-gray-300 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+                  className="w-2/3 py-3 rounded-lg bg-[#352820] hover:bg-[#4b382b] disabled:bg-gray-300 text-[#f0dc78] font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
                 >
                   {isRedirecting ? 'Redirigiendo a Mercado Pago...' : checkoutLoading ? 'Procesando...' : 'Finalizar Compra'}
                 </button>
+
               </div>
             </form>
           )}

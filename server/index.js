@@ -984,10 +984,15 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
 // POST /api/orders (protected client)
 app.post('/api/orders', requireClient, async (req, res) => {
   try {
-    const { items, metodo_pago: paymentMethod } = req.body;
+    const { items, metodo_pago: paymentMethod, shippingInfo } = req.body;
     if (!PAYMENT_METHODS.has(paymentMethod)) {
       return res.status(400).json({ error: 'Método de pago inválido.' });
     }
+    const address = String(shippingInfo?.address || '').trim();
+    if (!address || address.length < 3) {
+      return res.status(400).json({ error: 'La dirección de entrega es obligatoria para procesar el pedido.' });
+    }
+
     const { orderId, trustedOrder, surcharge } = await withTransaction(async (transaction) => {
       const trustedOrder = await getTrustedOrderLines(items, transaction);
       const baseTotalCents = Math.round(trustedOrder.total * 100);
