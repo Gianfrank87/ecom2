@@ -71,28 +71,28 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
   };
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
+    <div className="rounded-none border border-amber-200 bg-amber-50/70 p-4 space-y-3">
       <div className="flex items-start gap-3">
-        <FileUp className="w-5 h-5 shrink-0 text-amber-700 mt-0.5" />
+        <FileUp className="w-5 h-5 shrink-0 text-[#352820] mt-0.5" />
         <div>
           <h3 className="text-sm font-extrabold text-gray-900">Comprobante de transferencia</h3>
           <p className="text-xs text-gray-600 mt-1">Subí una imagen JPEG/PNG o PDF de hasta 5 MB.</p>
         </div>
       </div>
       {(hasReceipt || uploaded) && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+        <div className="flex items-center justify-between gap-3 rounded-none border border-emerald-200 bg-emerald-50 px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
             <CheckCircle2 className="w-4 h-4" /> Comprobante enviado
           </span>
-          <button type="button" onClick={handleDownload} disabled={downloading} className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#0f172a] hover:text-[#e52521] disabled:opacity-50 cursor-pointer" title="Descargar comprobante">
+          <button type="button" onClick={handleDownload} disabled={downloading} className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#352820] hover:text-[#4b382b] disabled:opacity-50 cursor-pointer" title="Descargar comprobante">
             <Download className="w-4 h-4" /> {downloading ? 'Descargando...' : 'Descargar'}
           </button>
         </div>
       )}
       {allowUpload && (
         <form onSubmit={handleUpload} className="space-y-2">
-          <input type="file" name="comprobante" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} className="block w-full text-xs text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#0f172a] file:px-3 file:py-2 file:text-xs file:font-bold file:text-white hover:file:bg-[#1e293b]" />
-          <button type="submit" disabled={!file || uploading} className="w-full rounded-lg bg-[#e52521] px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#c91d19] disabled:cursor-not-allowed disabled:bg-gray-300 cursor-pointer">
+          <input type="file" name="comprobante" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} className="block w-full text-xs text-gray-600 file:mr-3 file:rounded-none file:border-0 file:bg-[#352820] file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#f0dc78] hover:file:bg-[#4b382b]" />
+          <button type="submit" disabled={!file || uploading} className="w-full rounded-none bg-[#352820] px-3 py-2.5 text-xs font-black uppercase tracking-wider text-[#f0dc78] hover:bg-[#4b382b] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 cursor-pointer">
             {uploading ? 'Subiendo...' : 'Subir comprobante'}
           </button>
         </form>

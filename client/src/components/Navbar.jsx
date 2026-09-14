@@ -271,7 +271,7 @@ export default function Navbar() {
 
             {/* Expandable Search Input & Dropdown */}
             {isSearchExpanded && (
-              <div className="absolute top-full left-0 mt-2 w-72 sm:w-80 bg-white border border-gray-200 rounded-lg shadow-xl p-2.5 z-50">
+              <div className="absolute top-full left-0 mt-2 w-72 sm:w-80 bg-white border border-[#352820]/30 rounded-none shadow-2xl p-2.5 z-50">
                 <form onSubmit={handleSearchSubmit} className="relative flex items-center">
                   <input
                     type="text"
@@ -279,12 +279,12 @@ export default function Navbar() {
                     value={searchQuery}
                     autoFocus
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-3 pr-9 py-2 rounded-md bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#d3ad2f] text-xs text-gray-800 placeholder-gray-500"
+                    className="w-full pl-3 pr-9 py-2 rounded-none bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#352820] focus:border-[#352820] text-xs text-[#352820] font-semibold placeholder-gray-500"
                     aria-label="Buscador de productos"
                   />
                   <button
                     type="submit"
-                    className="absolute right-1.5 p-1 text-gray-600 hover:text-[#d3ad2f] transition-colors cursor-pointer"
+                    className="absolute right-1.5 p-1 text-[#352820] hover:text-[#d3ad2f] transition-colors cursor-pointer"
                     aria-label="Buscar"
                   >
                     <Search className="w-4 h-4" />
@@ -293,7 +293,7 @@ export default function Navbar() {
 
                 {/* Suggestions Dropdown */}
                 {showSuggestions && (
-                  <div className="mt-2 divide-y divide-gray-100 max-h-60 overflow-y-auto bg-white rounded-md">
+                  <div className="mt-2 divide-y divide-gray-100 max-h-60 overflow-y-auto bg-white rounded-none border border-gray-200">
                     {suggestions.length > 0 ? (
                       suggestions.map((item) => (
                         <div
@@ -301,16 +301,16 @@ export default function Navbar() {
                           onClick={() => handleSelectSuggestion(item.id)}
                           className="p-2 hover:bg-amber-50 flex items-center gap-2 cursor-pointer transition-colors"
                         >
-                          <img src={item.image} alt={item.name} className="w-8 h-8 object-contain rounded bg-gray-100 p-0.5 shrink-0" />
+                          <img src={item.image} alt={item.name} className="w-8 h-8 object-contain rounded-none bg-gray-50 border border-gray-200 p-0.5 shrink-0" />
                           <div className="flex-grow min-w-0">
-                            <p className="font-bold text-xs text-gray-900 truncate">{item.name}</p>
+                            <p className="font-extrabold text-xs text-[#352820] truncate">{item.name}</p>
                             <span className="text-[10px] text-gray-500 capitalize block">{item.category}</span>
                           </div>
-                          <span className="font-bold text-xs text-gray-900 shrink-0">{formatPrice(item.price)}</span>
+                          <span className="font-black text-xs text-[#352820] shrink-0">{formatPrice(item.price)}</span>
                         </div>
                       ))
                     ) : (
-                      <div className="p-3 text-center text-xs text-gray-500">
+                      <div className="p-3 text-center text-xs text-gray-500 font-medium">
                         No se encontraron productos
                       </div>
                     )}
@@ -352,7 +352,7 @@ export default function Navbar() {
                   {/* Notification Badge */}
                   {totalAdminNotifications > 0 && (
                     <span
-                      className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center"
+                      className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-none bg-[#352820] text-[#f0dc78] text-[8px] font-black flex items-center justify-center border border-[#d3ad2f]"
                       aria-label={`${totalAdminNotifications} notificaciones pendientes`}
                     >
                       {totalAdminNotifications}
@@ -362,21 +362,21 @@ export default function Navbar() {
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl py-2 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#352820]/30 rounded-none shadow-2xl py-2 z-50">
                     <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-bold text-gray-900">{clientUser.name}</p>
-                      <p className="text-xs text-gray-500 truncate">{clientUser.email}</p>
+                      <p className="text-sm font-extrabold text-[#352820]">{clientUser.name}</p>
+                      <p className="text-xs text-gray-500 truncate font-medium">{clientUser.email}</p>
                     </div>
                     {isAdmin ? (
                       <>
                         <Link
                           to="/admin?tab=sales&view=pending"
                           onClick={handleLinkClick}
-                          className="flex items-center justify-between gap-3 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#d3ad2f] transition-colors"
+                          className="flex items-center justify-between gap-3 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
                         >
                           <span className="flex items-center gap-2"><Package className="w-4 h-4" /> Pendientes</span>
                           {adminNotifications.sales > 0 && (
-                            <span className="min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                            <span className="min-w-4 h-4 px-1 rounded-none bg-[#352820] text-[#f0dc78] text-[9px] font-black flex items-center justify-center">
                               {adminNotifications.sales}
                             </span>
                           )}
@@ -384,18 +384,18 @@ export default function Navbar() {
                         <Link
                           to="/admin?tab=sales&view=resolved"
                           onClick={handleLinkClick}
-                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#d3ad2f] transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
                         >
                           <ShoppingCart className="w-4 h-4" /> Ventas
                         </Link>
                         <Link
                           to="/admin?tab=messages"
                           onClick={handleLinkClick}
-                          className="flex items-center justify-between gap-3 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#d3ad2f] transition-colors"
+                          className="flex items-center justify-between gap-3 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
                         >
                           <span className="flex items-center gap-2"><MessageCircle className="w-4 h-4" /> Mensajes</span>
                           {adminNotifications.messages > 0 && (
-                            <span className="min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                            <span className="min-w-4 h-4 px-1 rounded-none bg-[#352820] text-[#f0dc78] text-[9px] font-black flex items-center justify-center">
                               {adminNotifications.messages}
                             </span>
                           )}
@@ -405,7 +405,7 @@ export default function Navbar() {
                       <Link
                         to="/mis-pedidos"
                         onClick={handleLinkClick}
-                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#d3ad2f] transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
                       >
                         <Package className="w-4 h-4" /> Mis Pedidos
                       </Link>
@@ -421,6 +421,7 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
+
               <Link
                 to="/login"
                 className="p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors"
