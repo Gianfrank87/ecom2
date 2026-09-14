@@ -347,5 +347,26 @@ export const api = {
     });
     if (!res.ok) throw new Error('Error al obtener los mensajes');
     return res.json();
+  },
+
+  // ─── Envíos ───
+  searchShippingLocalities: async (query) => {
+    const res = await fetch(`${API_URL}/shipping/localities?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error('Error al buscar localidades de envío');
+    return res.json();
+  },
+
+  getShippingQuote: async (destinationId) => {
+    const res = await fetch(`${API_URL}/shipping/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destinationId })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al cotizar el envío');
+    }
+    return res.json();
   }
 };
+

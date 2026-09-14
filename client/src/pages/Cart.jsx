@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Trash2, Plus, Minus, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Minus, ArrowLeft, CheckCircle2, AlertCircle, Truck, Search, MapPin, RotateCcw, Loader2 } from 'lucide-react';
+
 import { useCart } from '../context/CartContext';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
@@ -20,11 +21,6 @@ export default function Cart() {
   const [bankConfigLoading, setBankConfigLoading] = useState(false);
   const [bankConfigError, setBankConfigError] = useState('');
 
-  // Shipping States
-  const [postalCode, setPostalCode] = useState('');
-  const [shippingCost, setShippingCost] = useState(0);
-  const [shippingLoading, setShippingLoading] = useState(false);
-
   // Checkout Form State
   const [formData, setFormData] = useState({
     name: '',
@@ -36,6 +32,60 @@ export default function Cart() {
   const [formErrors, setFormErrors] = useState({});
   const [checkoutStep, setCheckoutStep] = useState('cart'); // cart, checkout, success
   const [simulatedOrderNumber, setSimulatedOrderNumber] = useState('');
+
+  // Shipping Simulation State
+  const [shippingQuote, setShippingQuote] = useState(null);
+  const [isShippingPanelOpen, setIsShippingPanelOpen] = useState(false);
+  const [localityQuery, setLocalityQuery] = useState('');
+  const [localityResults, setLocalityResults] = useState([]);
+  const [isSearchingLocalities, setIsSearchingLocalities] = useState(false);
+  const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
+  const [shippingError, setShippingError] = useState('');
+
+  // Search localities with debounce
+  useEffect(() => {
+    const q = localityQuery.trim();
+    if (q.length < 2) {
+      setLocalityResults([]);
+      setIsSearchingLocalities(false);
+      return;
+    }
+
+    setIsSearchingLocalities(true);
+    const timer = setTimeout(() => {
+      api.searchShippingLocalities(q)
+        .then((data) => setLocalityResults(data))
+        .catch((err) => console.error('Error buscando localidades:', err))
+        .finally(() => setIsSearchingLocalities(false));
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [localityQuery]);
+
+  const handleSelectLocality = async (locality) => {
+    setIsCalculatingShipping(true);
+    setShippingError('');
+    try {
+      const quote = await api.getShippingQuote(locality.id);
+      setShippingQuote(quote);
+      setLocalityResults([]);
+      setLocalityQuery('');
+      setIsShippingPanelOpen(false);
+    } catch (err) {
+      setShippingError(err.message || 'Error al cotizar el envío.');
+    } finally {
+      setIsCalculatingShipping(false);
+    }
+  };
+
+  const handleResetShipping = () => {
+    setShippingQuote(null);
+    setShippingError('');
+    setLocalityQuery('');
+    setLocalityResults([]);
+    setIsShippingPanelOpen(true);
+  };
+
 
   // Prefill data if user logged in
   useEffect(() => {
@@ -76,25 +126,6 @@ export default function Cart() {
       currency: 'ARS',
       minimumFractionDigits: 0
     }).format(value);
-  };
-
-  const calculateShipping = async () => {
-    if (!postalCode.trim()) return;
-    setShippingLoading(true);
-    try {
-      const response = await fetch('http://localhost:5000/api/envios/cotizar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpDestino: postalCode, volumen: 1000 })
-      });
-      if (!response.ok) throw new Error('Error al cotizar');
-      const data = await response.json();
-      setShippingCost(Number(data.tarifaConIva.total));
-    } catch (error) {
-      console.error("Fallo la cotización:", error);
-    } finally {
-      setShippingLoading(false);
-    }
   };
 
   const handleInputChange = (e) => {
@@ -138,7 +169,16 @@ export default function Cart() {
       const orderData = {
         items: cart,
         metodo_pago: paymentMethod,
-        shippingInfo: { ...formData, cp: postalCode, costoEnvio: shippingCost }
+        shippingInfo: {
+          ...formData,
+          shippingQuote: shippingQuote ? {
+            destinationId: shippingQuote.destination.id,
+            localidad: shippingQuote.destination.localidad,
+            provincia: shippingQuote.destination.provincia,
+            cp: shippingQuote.destination.cp,
+            price: shippingQuote.price
+          } : null
+        }
       };
       const res = await api.createOrder(orderData, clientToken);
 
@@ -167,10 +207,13 @@ export default function Cart() {
     }
   };
 
-  const baseTotal = getCartTotal() + shippingCost;
+  const baseTotal = getCartTotal();
+  const shippingCost = shippingQuote ? Number(shippingQuote.price || 0) : 0;
+  const grandTotal = baseTotal + shippingCost;
   const displayedTotal = paymentMethod === 'mercadopago'
-    ? Math.round((baseTotal / 0.934) * 100) / 100
-    : baseTotal;
+    ? Math.round((grandTotal / 0.934) * 100) / 100
+    : grandTotal;
+
 
   if (checkoutStep === 'success') {
     return (
@@ -199,7 +242,6 @@ export default function Cart() {
               <p className="text-xs text-gray-600"><strong>Dirección:</strong> {formData.address}</p>
               <p className="text-xs text-gray-600"><strong>Teléfono:</strong> {formData.phone}</p>
               <p className="text-xs text-gray-600"><strong>Email:</strong> {formData.email}</p>
-              {shippingCost > 0 && <p className="text-xs text-gray-600"><strong>Costo de Envío:</strong> {formatPrice(shippingCost)}</p>}
             </div>
             {formData.notes && (
               <p className="text-[11px] text-gray-500 italic pt-1 border-t border-gray-150">
@@ -361,47 +403,144 @@ export default function Cart() {
           <div className="space-y-3 text-sm font-semibold">
             <div className="flex justify-between text-gray-500">
               <span>Subtotal</span>
-              <span className="text-gray-900 font-bold">{formatPrice(getCartTotal())}</span>
+              <span className="text-gray-900 font-bold">{formatPrice(baseTotal)}</span>
             </div>
 
-            {/* Cotizador de Envío Integrado */}
-            <div className="py-2 border-y border-gray-100 space-y-2">
-              <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider">
-                Calcular Envío
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={postalCode}
-                  onChange={(e) => setPostalCode(e.target.value)}
-                  placeholder="Código Postal (Ej: 3260)"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={calculateShipping}
-                  disabled={shippingLoading || !postalCode}
-                  className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-colors cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {shippingLoading ? '...' : 'Cotizar'}
-                </button>
-              </div>
-
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-gray-500">Costo de Envío</span>
-                {shippingCost > 0 ? (
-                  <span className="text-gray-900 font-bold">{formatPrice(shippingCost)}</span>
+            {/* Bloque de Cálculo de Envío */}
+            <div className="space-y-2.5 border-t border-b border-gray-150 py-3 my-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="flex items-center gap-1.5 font-bold text-gray-800">
+                  <Truck className="w-4 h-4 text-[#352820]" /> Costo de envío
+                </span>
+                {shippingQuote ? (
+                  <span className="text-emerald-700 font-black text-sm">
+                    {formatPrice(shippingQuote.price)}
+                  </span>
                 ) : (
-                  <span className="text-gray-400 text-xs font-medium italic">Pendiente</span>
+                  <span className="text-gray-400 font-semibold italic text-[11px]">
+                    No calculado
+                  </span>
                 )}
               </div>
+
+              {/* Botón para abrir buscador si no hay cotización previa */}
+              {!shippingQuote && !isShippingPanelOpen && (
+                <button
+                  type="button"
+                  onClick={() => setIsShippingPanelOpen(true)}
+                  className="w-full text-left text-xs font-bold text-[#352820] hover:text-black bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 rounded-lg px-3 py-2 flex items-center justify-between transition-all cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-[#d3ad2f]" />
+                    <span>Calcular costo de envío</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold text-[#a78665] uppercase tracking-wider">Calcular</span>
+                </button>
+              )}
+
+              {/* Detalle de destino seleccionado */}
+              {shippingQuote && (
+                <div className="bg-amber-50/60 border border-amber-200/70 rounded-lg p-2.5 space-y-1 text-left">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[11px] leading-tight">
+                      <span className="font-black text-gray-900 block">
+                        Envío a {shippingQuote.destination.localidad}, {shippingQuote.destination.provincia}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-medium">
+                        Salida: Gualeguaychú, Entre Ríos {shippingQuote.destination.cp ? `(CP ${shippingQuote.destination.cp})` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetShipping}
+                      className="text-[10px] font-extrabold text-[#352820] hover:text-[#d3ad2f] underline shrink-0 flex items-center gap-1 cursor-pointer"
+                      title="Cambiar destino"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Cambiar destino
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Panel Desplegable de Búsqueda */}
+              {isShippingPanelOpen && !shippingQuote && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2.5 text-left animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-extrabold text-gray-800 uppercase tracking-wider">
+                      ¿A dónde enviamos?
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsShippingPanelOpen(false);
+                        setLocalityQuery('');
+                        setLocalityResults([]);
+                      }}
+                      className="text-[10px] text-gray-400 hover:text-gray-600 font-bold"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] text-gray-500">
+                    Origen: Gualeguaychú, Entre Ríos. Buscá tu localidad:
+                  </p>
+
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={localityQuery}
+                      onChange={(e) => setLocalityQuery(e.target.value)}
+                      placeholder="Ej: Gualeguay, Concepción, Buenos Aires..."
+                      className="w-full pl-8 pr-8 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#d3ad2f] focus:border-[#d3ad2f]"
+                      autoFocus
+                    />
+                    {isSearchingLocalities && (
+                      <Loader2 className="w-3.5 h-3.5 absolute right-3 top-2.5 text-[#d3ad2f] animate-spin" />
+                    )}
+                  </div>
+
+                  {shippingError && (
+                    <p className="text-[11px] font-bold text-red-600">{shippingError}</p>
+                  )}
+
+                  {/* Lista de resultados coincidentes */}
+                  {localityResults.length > 0 && (
+                    <div className="max-h-44 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-xs divide-y divide-gray-100">
+                      {localityResults.map((loc) => (
+                        <button
+                          key={loc.id}
+                          type="button"
+                          disabled={isCalculatingShipping}
+                          onClick={() => handleSelectLocality(loc)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-amber-50 hover:text-[#352820] flex items-center justify-between transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-[#d3ad2f] shrink-0" />
+                            <span className="font-extrabold text-gray-900">{loc.localidad}, <span className="font-normal text-gray-600">{loc.provincia}</span></span>
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-mono">CP {loc.cp}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {localityQuery.trim().length >= 2 && localityResults.length === 0 && !isSearchingLocalities && (
+                    <p className="text-[11px] text-gray-500 italic p-1">
+                      No encontramos coincidencias. Seleccioná una localidad del listado.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between text-base font-extrabold text-gray-900">
+            <div className="flex justify-between text-base font-extrabold text-gray-900 pt-1">
               <span>Total</span>
               <span className="font-black text-2xl text-gray-900">{formatPrice(displayedTotal)}</span>
             </div>
           </div>
+
 
           <fieldset className="space-y-3 border-t border-gray-200 pt-4">
             <legend className="font-extrabold text-sm text-gray-900">Método de pago</legend>
@@ -447,6 +586,7 @@ export default function Cart() {
                   const outOfStock = validateStock();
                   if (outOfStock.length > 0) {
                     setApiError(`Los siguientes productos no tienen stock disponible: ${outOfStock.map(item => item.name).join(', ')}`);
+                    // Scroll to top to show the error
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else {
                     setApiError('');
@@ -470,6 +610,7 @@ export default function Cart() {
                 </div>
               )}
 
+              {/* Form Input fields */}
               <div>
                 <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1.5">Nombre Completo</label>
                 <input

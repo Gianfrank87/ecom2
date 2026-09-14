@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
 import { MercadoPagoConfig, Preference, Payment, WebhookSignatureValidator } from 'mercadopago';
+import { searchLocalities, calculateShippingQuote } from './services/shippingService.js';
 
 dotenv.config();
 
@@ -1317,43 +1318,41 @@ app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
-// COTIZADOR DE ENVÍOS (MOCK TEMPORAL)
+// COTIZADOR Y BÚSQUEDA DE ENVÍOS (SHIPPING SIMULATOR)
 // ─────────────────────────────────────────
 
-// POST /api/envios/cotizar (público para el carrito)
-app.post('/api/envios/cotizar', async (req, res) => {
-  const { cpDestino, volumen } = req.body;
-
-  if (!cpDestino) {
-    return res.status(400).json({ error: 'El código postal de destino es obligatorio.' });
+// GET /api/shipping/localities — público, autocompletado de destinos
+app.get('/api/shipping/localities', (req, res) => {
+  try {
+    const query = String(req.query.q || '').trim();
+    if (query.length < 2) {
+      return res.json([]);
+    }
+    const results = searchLocalities(query);
+    res.json(results);
+  } catch (err) {
+    internalError(res, err);
   }
+});
 
-  // Simulamos un delay de red de 800ms para darle realismo a la interfaz
-  setTimeout(() => {
-    let costoBase = 8500; // Tarifa nacional estándar
-
-    // Lógica de zonas para calcular el precio
-    if (cpDestino === "3260") { // Envíos locales dentro de Concepción del Uruguay
-      costoBase = 2500;
-    } else if (cpDestino.startsWith("32") || cpDestino.startsWith("31")) {
-      costoBase = 5000; // Resto de Entre Ríos
+// POST /api/shipping/quote — público, cotización por destinationId
+app.post('/api/shipping/quote', (req, res) => {
+  try {
+    const { destinationId } = req.body;
+    if (!destinationId) {
+      return res.status(400).json({ error: 'Debés seleccionar una localidad de destino válida.' });
     }
 
-    // Recargo ficticio por volumen (asumimos 1000cm3 por defecto si no lo envían)
-    const recargoVolumen = ((volumen || 1000) / 1000) * 500;
-    const precioFinal = costoBase + recargoVolumen;
-
-    // Devolvemos la estructura exacta que tu frontend en React espera recibir de Andreani
-    res.json({
-      pesoAforado: "70.00",
-      tarifaConIva: {
-        seguroDistribucion: "15.00",
-        distribucion: (precioFinal * 0.79).toFixed(2),
-        total: precioFinal.toFixed(2)
-      }
-    });
-  }, 800);
+    const quote = calculateShippingQuote(destinationId);
+    res.json(quote);
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    internalError(res, err);
+  }
 });
+
 
 // ─────────────────────────────────────────
 // START SERVER
