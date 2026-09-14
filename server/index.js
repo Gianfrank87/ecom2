@@ -183,12 +183,12 @@ const mapOffer = async (o) => {
     const rows = await dbAll(`SELECT * FROM productos WHERE id IN (${placeholders})`, ids);
     products = rows.map(mapProduct);
   }
-  
+
   const salesResult = await dbGet(
-    'SELECT SUM(cantidad) as total FROM (SELECT DISTINCT pedido_id, cantidad FROM pedido_items WHERE oferta_id = ?)', 
+    'SELECT SUM(cantidad) as total FROM (SELECT DISTINCT pedido_id, cantidad FROM pedido_items WHERE oferta_id = ?)',
     [o.id]
   );
-  
+
   return {
     id: String(o.id),
     nombre: o.nombre,
@@ -341,7 +341,7 @@ app.post('/api/clients/register', authLimiter, async (req, res) => {
     if (normalizedName.length > 120 || !isValidEmail(normalizedEmail) || String(password).length < 8) {
       return res.status(400).json({ error: 'Datos de registro inválidos.' });
     }
-    
+
     // Check if email exists
     const existing = await dbGet('SELECT id FROM clientes WHERE lower(email) = lower(?)', [normalizedEmail]);
     if (existing) {
@@ -363,10 +363,10 @@ app.post('/api/clients/register', authLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.status(201).json({ 
-      token, 
+    res.status(201).json({
+      token,
       user: { id: newClientId, name: normalizedName, email: normalizedEmail, role: 'cliente' },
-      message: 'Registro exitoso' 
+      message: 'Registro exitoso'
     });
   } catch (err) {
     internalError(res);
@@ -400,10 +400,10 @@ app.post('/api/clients/login', authLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.json({ 
-      token, 
+    res.json({
+      token,
       user: { id: client.id, name: client.nombre, email: client.email, role: client.rol || 'cliente' },
-      message: 'Login exitoso' 
+      message: 'Login exitoso'
     });
   } catch (err) {
     internalError(res);
@@ -515,28 +515,28 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     const productId = req.params.id;
-    
+
     // Verificar que el producto existe
     const check = await dbGet('SELECT id FROM productos WHERE id = ?', [productId]);
     if (!check) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    
+
     // Intentar desactivar ofertas, pero no fallar si hay error
     try {
       const offers = await dbAll(
         'SELECT id, producto_ids FROM ofertas WHERE activa = TRUE',
         []
       );
-      
+
       for (const offer of offers) {
         try {
           let productIds = [];
-    if (Array.isArray(offer.producto_ids)) {
-      productIds = offer.producto_ids;
-    } else if (typeof offer.producto_ids === 'string') {
-      productIds = JSON.parse(offer.producto_ids || '[]');
-    }
+          if (Array.isArray(offer.producto_ids)) {
+            productIds = offer.producto_ids;
+          } else if (typeof offer.producto_ids === 'string') {
+            productIds = JSON.parse(offer.producto_ids || '[]');
+          }
           if (Array.isArray(productIds) && productIds.map(String).includes(String(productId))) {
             // Intentar actualizar, ignorar si falla
             await dbRun(
@@ -552,10 +552,10 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
       console.warn('No se pudieron procesar ofertas:', offerErr.message);
       // Continuar de todas formas
     }
-    
+
     // Eliminar el producto
     const result = await dbRun('UPDATE productos SET activo = false WHERE id = ?', [productId]);
-    
+
     if (result.rowCount > 0) {
       res.json({ message: 'Producto eliminado exitosamente' });
     } else {
@@ -739,7 +739,7 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
       JOIN clientes c ON p.cliente_id = c.id
       ORDER BY p.fecha DESC
     `);
-    
+
     // For each order, fetch items and product details
     for (const order of orders) {
       const items = await dbAll(`
@@ -764,10 +764,10 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
     if (!ORDER_STATUSES.has(estado)) {
       return res.status(400).json({ error: 'Estado inválido' });
     }
-    
+
     const check = await dbGet('SELECT id FROM pedidos WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Pedido no encontrado' });
-    
+
     await dbRun('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, req.params.id]);
     res.json({ message: 'Estado actualizado exitosamente' });
   } catch (err) {
@@ -962,7 +962,7 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
       WHERE cliente_id = ? 
       ORDER BY fecha DESC
     `, [req.user.id]);
-    
+
     // For each order, fetch items and product details
     for (const order of orders) {
       const items = await dbAll(`
@@ -1076,10 +1076,10 @@ app.post('/api/orders', requireClient, async (req, res) => {
       if (!mpClient) {
         throw Object.assign(new Error('Mercado Pago no está configurado en el servidor.'), { status: 500 });
       }
-      
+
       const preference = new Preference(mpClient);
       const host = process.env.CLIENT_URL || 'http://localhost:5173';
-      
+
       const preferenceItems = trustedOrder.lines.map(line => ({
         id: String(line.productId),
         title: line.productName,
@@ -1113,14 +1113,14 @@ app.post('/api/orders', requireClient, async (req, res) => {
         },
         requestOptions: { idempotencyKey }
       });
-      
+
       init_point = prefResult.init_point;
     }
 
     res.status(201).json({
       orderId,
       init_point,
-      message: 'Pedido creado exitosamente' 
+      message: 'Pedido creado exitosamente'
     });
   } catch (err) {
     if (err.status) {
@@ -1314,6 +1314,45 @@ app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
   } catch (error) {
     internalError(res);
   }
+});
+
+// ─────────────────────────────────────────
+// COTIZADOR DE ENVÍOS (MOCK TEMPORAL)
+// ─────────────────────────────────────────
+
+// POST /api/envios/cotizar (público para el carrito)
+app.post('/api/envios/cotizar', async (req, res) => {
+  const { cpDestino, volumen } = req.body;
+
+  if (!cpDestino) {
+    return res.status(400).json({ error: 'El código postal de destino es obligatorio.' });
+  }
+
+  // Simulamos un delay de red de 800ms para darle realismo a la interfaz
+  setTimeout(() => {
+    let costoBase = 8500; // Tarifa nacional estándar
+
+    // Lógica de zonas para calcular el precio
+    if (cpDestino === "3260") { // Envíos locales dentro de Concepción del Uruguay
+      costoBase = 2500;
+    } else if (cpDestino.startsWith("32") || cpDestino.startsWith("31")) {
+      costoBase = 5000; // Resto de Entre Ríos
+    }
+
+    // Recargo ficticio por volumen (asumimos 1000cm3 por defecto si no lo envían)
+    const recargoVolumen = ((volumen || 1000) / 1000) * 500;
+    const precioFinal = costoBase + recargoVolumen;
+
+    // Devolvemos la estructura exacta que tu frontend en React espera recibir de Andreani
+    res.json({
+      pesoAforado: "70.00",
+      tarifaConIva: {
+        seguroDistribucion: "15.00",
+        distribucion: (precioFinal * 0.79).toFixed(2),
+        total: precioFinal.toFixed(2)
+      }
+    });
+  }, 800);
 });
 
 // ─────────────────────────────────────────

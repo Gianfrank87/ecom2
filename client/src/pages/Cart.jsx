@@ -11,7 +11,7 @@ export default function Cart() {
   const { clientUser, clientToken } = useClientAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -19,7 +19,12 @@ export default function Cart() {
   const [bankConfig, setBankConfig] = useState(null);
   const [bankConfigLoading, setBankConfigLoading] = useState(false);
   const [bankConfigError, setBankConfigError] = useState('');
-  
+
+  // Shipping States
+  const [postalCode, setPostalCode] = useState('');
+  const [shippingCost, setShippingCost] = useState(0);
+  const [shippingLoading, setShippingLoading] = useState(false);
+
   // Checkout Form State
   const [formData, setFormData] = useState({
     name: '',
@@ -56,7 +61,7 @@ export default function Cart() {
     const searchParams = new URLSearchParams(location.search);
     const statusParam = searchParams.get('status') || searchParams.get('collection_status');
     const hasMpParams = searchParams.has('preference_id') || searchParams.has('payment_id') || searchParams.has('collection_id') || searchParams.has('merchant_order_id');
-    
+
     if ((statusParam && ['failure', 'null', 'rejected', 'pending'].includes(String(statusParam).toLowerCase())) || (hasMpParams && statusParam !== 'approved')) {
       setApiError('El pago no se completó, podés volver a intentarlo.');
       setCheckoutStep('checkout');
@@ -71,6 +76,25 @@ export default function Cart() {
       currency: 'ARS',
       minimumFractionDigits: 0
     }).format(value);
+  };
+
+  const calculateShipping = async () => {
+    if (!postalCode.trim()) return;
+    setShippingLoading(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/envios/cotizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpDestino: postalCode, volumen: 1000 })
+      });
+      if (!response.ok) throw new Error('Error al cotizar');
+      const data = await response.json();
+      setShippingCost(Number(data.tarifaConIva.total));
+    } catch (error) {
+      console.error("Fallo la cotización:", error);
+    } finally {
+      setShippingLoading(false);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -109,15 +133,15 @@ export default function Cart() {
 
     setCheckoutLoading(true);
     setApiError('');
-    
+
     try {
       const orderData = {
         items: cart,
         metodo_pago: paymentMethod,
-        shippingInfo: formData
+        shippingInfo: { ...formData, cp: postalCode, costoEnvio: shippingCost }
       };
       const res = await api.createOrder(orderData, clientToken);
-      
+
       if (paymentMethod === 'mercadopago' && res.init_point) {
         setIsRedirecting(true);
         window.location.href = res.init_point;
@@ -126,7 +150,7 @@ export default function Cart() {
 
       setSimulatedOrderNumber(res.orderId);
       setCheckoutStep('success');
-      
+
       setTimeout(() => {
         clearCart();
       }, 100);
@@ -143,7 +167,7 @@ export default function Cart() {
     }
   };
 
-  const baseTotal = getCartTotal();
+  const baseTotal = getCartTotal() + shippingCost;
   const displayedTotal = paymentMethod === 'mercadopago'
     ? Math.round((baseTotal / 0.934) * 100) / 100
     : baseTotal;
@@ -155,7 +179,7 @@ export default function Cart() {
           <div className="w-20 h-20 bg-sage-50 border border-sage-100 rounded-full flex items-center justify-center mx-auto text-sage-600 animate-pulse">
             <CheckCircle2 className="w-12 h-12" />
           </div>
-          
+
           <div className="space-y-2">
             <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-gray-800">
               ¡Pedido recibido con éxito!
@@ -175,6 +199,7 @@ export default function Cart() {
               <p className="text-xs text-gray-600"><strong>Dirección:</strong> {formData.address}</p>
               <p className="text-xs text-gray-600"><strong>Teléfono:</strong> {formData.phone}</p>
               <p className="text-xs text-gray-600"><strong>Email:</strong> {formData.email}</p>
+              {shippingCost > 0 && <p className="text-xs text-gray-600"><strong>Costo de Envío:</strong> {formatPrice(shippingCost)}</p>}
             </div>
             {formData.notes && (
               <p className="text-[11px] text-gray-500 italic pt-1 border-t border-gray-150">
@@ -261,7 +286,7 @@ export default function Cart() {
 
       {/* Main Grid */}
       <div className="grid lg:grid-cols-12 gap-8 items-start">
-        
+
         {/* Left Column: Item List */}
         <div className="lg:col-span-7 space-y-4">
           {cart.map((item) => (
@@ -332,17 +357,46 @@ export default function Cart() {
         {/* Right Column: Order Form / Summary */}
         <div className="lg:col-span-5 bg-white border border-gray-200 rounded-xl p-6 shadow-xs space-y-6 text-left">
           <h2 className="font-extrabold text-lg text-gray-900">Resumen de Compra</h2>
-          
+
           <div className="space-y-3 text-sm font-semibold">
             <div className="flex justify-between text-gray-500">
               <span>Subtotal</span>
-              <span className="text-gray-900 font-bold">{formatPrice(baseTotal)}</span>
+              <span className="text-gray-900 font-bold">{formatPrice(getCartTotal())}</span>
             </div>
-            <div className="flex justify-between text-gray-500">
-              <span>Envío</span>
-              <span className="text-emerald-700 font-extrabold">¡Gratis!</span>
+
+            {/* Cotizador de Envío Integrado */}
+            <div className="py-2 border-y border-gray-100 space-y-2">
+              <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider">
+                Calcular Envío
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  placeholder="Código Postal (Ej: 3260)"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={calculateShipping}
+                  disabled={shippingLoading || !postalCode}
+                  className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-colors cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {shippingLoading ? '...' : 'Cotizar'}
+                </button>
+              </div>
+
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-gray-500">Costo de Envío</span>
+                {shippingCost > 0 ? (
+                  <span className="text-gray-900 font-bold">{formatPrice(shippingCost)}</span>
+                ) : (
+                  <span className="text-gray-400 text-xs font-medium italic">Pendiente</span>
+                )}
+              </div>
             </div>
-            <hr className="border-gray-200" />
+
             <div className="flex justify-between text-base font-extrabold text-gray-900">
               <span>Total</span>
               <span className="font-black text-2xl text-gray-900">{formatPrice(displayedTotal)}</span>
@@ -393,7 +447,6 @@ export default function Cart() {
                   const outOfStock = validateStock();
                   if (outOfStock.length > 0) {
                     setApiError(`Los siguientes productos no tienen stock disponible: ${outOfStock.map(item => item.name).join(', ')}`);
-                    // Scroll to top to show the error
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else {
                     setApiError('');
@@ -409,15 +462,14 @@ export default function Cart() {
             /* Checkout Form (Step 2) */
             <form onSubmit={handleCheckoutSubmit} className="space-y-4 pt-4 border-t border-gray-200">
               <h3 className="font-extrabold text-sm text-gray-900 mb-2">Datos de Entrega</h3>
-              
+
               {apiError && (
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-200">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span className="font-bold">{apiError}</span>
                 </div>
               )}
-              
-              {/* Form Input fields */}
+
               <div>
                 <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1.5">Nombre Completo</label>
                 <input
@@ -426,9 +478,8 @@ export default function Cart() {
                   value={formData.name}
                   onChange={handleInputChange}
                   placeholder="Ej: Laura González"
-                  className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${
-                    formErrors.name ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
-                  }`}
+                  className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${formErrors.name ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
+                    }`}
                 />
                 {formErrors.name && <p className="text-red-600 text-[10px] mt-1 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {formErrors.name}</p>}
               </div>
@@ -441,9 +492,8 @@ export default function Cart() {
                   value={formData.email}
                   onChange={handleInputChange}
                   placeholder="laura@ejemplo.com"
-                  className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${
-                    formErrors.email ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
-                  }`}
+                  className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${formErrors.email ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
+                    }`}
                 />
                 {formErrors.email && <p className="text-red-600 text-[10px] mt-1 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {formErrors.email}</p>}
               </div>
@@ -457,9 +507,8 @@ export default function Cart() {
                     value={formData.phone}
                     onChange={handleInputChange}
                     placeholder="11 5555 5555"
-                    className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${
-                      formErrors.phone ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
-                    }`}
+                    className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${formErrors.phone ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
+                      }`}
                   />
                   {formErrors.phone && <p className="text-red-600 text-[10px] mt-1 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {formErrors.phone}</p>}
                 </div>
@@ -471,9 +520,8 @@ export default function Cart() {
                     value={formData.address}
                     onChange={handleInputChange}
                     placeholder="Av. Santa Fe 1234"
-                    className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${
-                      formErrors.address ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
-                    }`}
+                    className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${formErrors.address ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
+                      }`}
                   />
                   {formErrors.address && <p className="text-red-600 text-[10px] mt-1 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {formErrors.address}</p>}
                 </div>
