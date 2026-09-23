@@ -26,8 +26,8 @@ function ProductCard({ product }) {
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
       currency: 'ARS',
-      minimumFractionDigits: 2,
-    }).format(price / 100);
+      minimumFractionDigits: 0,
+    }).format(price);
   };
 
   return (
