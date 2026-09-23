@@ -9,7 +9,6 @@
     "dev:local": "node scripts/local-environment.mjs dev",
     "dev:server:local": "node scripts/local-environment.mjs server",
     "dev": "cd client && vite",
-    "dev:local": "node scripts/dev-local.mjs",
     "build": "cd client && vite build",
     "lint": "oxlint client/src",
     "preview": "cd client && vite preview",
