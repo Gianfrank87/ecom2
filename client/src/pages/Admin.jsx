@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send } from 'lucide-react';
+import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send, ArrowDown, ArrowUp } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -24,9 +24,10 @@ const formatPrice = (value) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value ?? 0);
 
 // ─────────────── PRODUCT FORM ───────────────
+const EMPTY_PRODUCT_FORM = { name: '', category: 'alimentos', price: '', description: '', stock: '', featured: false };
 function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
-  const EMPTY = { name: '', category: 'alimentos', price: '', description: '', image: '', stock: '', featured: false };
-  const [formData, setFormData] = useState(EMPTY);
+  const [formData, setFormData] = useState(EMPTY_PRODUCT_FORM);
+  const [imageUrls, setImageUrls] = useState(['']);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -36,12 +37,13 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
         category: editProduct.category || 'alimentos',
         price: editProduct.price !== undefined ? editProduct.price : '',
         description: editProduct.description || '',
-        image: editProduct.image || '',
         stock: editProduct.stock !== undefined ? editProduct.stock : '',
         featured: Boolean(editProduct.featured)
       });
+      setImageUrls(editProduct.images?.length ? [...editProduct.images] : [editProduct.image || '']);
     } else {
-      setFormData(EMPTY);
+      setFormData(EMPTY_PRODUCT_FORM);
+      setImageUrls(['']);
     }
     setErrors({});
   }, [editProduct]);
@@ -51,7 +53,8 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
     if (!formData.name.trim()) e.name = 'El nombre es obligatorio.';
     if (formData.price === '' || Number(formData.price) <= 0) e.price = 'Precio inválido.';
     if (!formData.description.trim()) e.description = 'La descripción es obligatoria.';
-    if (!formData.image.trim() || !/^https?:\/\/.+/i.test(formData.image)) e.image = 'URL de imagen inválida.';
+    const urls = imageUrls.map((url) => url.trim()).filter(Boolean);
+    if (!urls.length || urls.some((url) => !/^https:\/\/.+/i.test(url))) e.image = 'Ingresá al menos una URL válida (https://...).';
     if (formData.stock === '' || Number(formData.stock) < 0) e.stock = 'Stock inválido.';
     return e;
   };
@@ -62,11 +65,31 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
     if (errors[name]) setErrors(p => ({ ...p, [name]: '' }));
   };
 
+  const updateImageUrl = (index, value) => {
+    setImageUrls((current) => current.map((url, currentIndex) => currentIndex === index ? value : url));
+    if (errors.image) setErrors((current) => ({ ...current, image: '' }));
+  };
+
+  const removeImageUrl = (index) => {
+    setImageUrls((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const moveImage = (index, direction) => {
+    setImageUrls((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    const payload = { ...formData, price: Number(formData.price), stock: Number(formData.stock) };
+    const urls = imageUrls.map((url) => url.trim()).filter(Boolean);
+    const payload = { ...formData, image: urls[0], images: urls, price: Number(formData.price), stock: Number(formData.stock) };
     try {
       if (editProduct) {
         await api.updateProduct(editProduct.id, payload);
@@ -117,9 +140,39 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
         {errors.description && <p className="err">{errors.description}</p>}
       </div>
       <div>
-        <label className="label-xs">URL de Imagen</label>
-        <input name="image" value={formData.image} onChange={handleChange} placeholder="https://..."
-          className={inp(errors.image ? 'border-red-400' : 'border-gray-200')} />
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <label className="label-xs mb-0">Imágenes del producto</label>
+          <button type="button" onClick={() => setImageUrls((current) => [...current, ''])}
+            className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-[#352820] hover:text-[#a78665] cursor-pointer"
+            title="Agregar otra imagen">
+            <Plus className="w-3.5 h-3.5" /> Agregar imagen
+          </button>
+        </div>
+        <p className="text-[10px] text-gray-500 mb-2">La primera imagen es la portada. Podés reordenarlas con las flechas.</p>
+        <div className="space-y-2">
+          {imageUrls.map((url, index) => (
+            <div key={index} className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 shrink-0 flex items-center justify-center bg-[#352820] text-[#f0dc78] text-[10px] font-black">{index + 1}</span>
+                  <input value={url} onChange={(event) => updateImageUrl(index, event.target.value)} placeholder="https://..."
+                    className={inp(errors.image ? 'border-red-400' : 'border-gray-200')} aria-label={`URL de imagen ${index + 1}`} />
+                </div>
+                {url.trim() && /^https:\/\/.+/i.test(url.trim()) && (
+                  <img src={url.trim()} alt={`Vista previa ${index + 1}`} className="ml-7 mt-2 h-16 w-16 object-contain border border-gray-200 bg-white p-1" />
+                )}
+              </div>
+              <div className="flex items-center gap-1 pt-1">
+                <button type="button" onClick={() => moveImage(index, -1)} disabled={index === 0}
+                  className="p-1 text-gray-500 hover:text-[#352820] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" title="Mover hacia arriba" aria-label="Mover imagen hacia arriba"><ArrowUp className="w-4 h-4" /></button>
+                <button type="button" onClick={() => moveImage(index, 1)} disabled={index === imageUrls.length - 1}
+                  className="p-1 text-gray-500 hover:text-[#352820] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" title="Mover hacia abajo" aria-label="Mover imagen hacia abajo"><ArrowDown className="w-4 h-4" /></button>
+                <button type="button" onClick={() => removeImageUrl(index)} disabled={imageUrls.length === 1}
+                  className="p-1 text-gray-500 hover:text-red-700 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" title="Quitar imagen" aria-label="Quitar imagen"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
         {errors.image && <p className="err">{errors.image}</p>}
       </div>
       <label htmlFor="featured" className="flex items-center gap-2 cursor-pointer">

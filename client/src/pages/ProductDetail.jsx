@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShoppingCart, Plus, Minus, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Plus, Minus, ShieldCheck, Truck, X, Maximize2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { api } from '../services/api';
+import { getProductImages } from '../utils/productImages';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -12,12 +13,16 @@ export default function ProductDetail() {
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
 
   // Load product from database
   useEffect(() => {
     api.getProduct(id)
       .then((data) => {
         setProduct(data);
+        setSelectedImageIndex(0);
+        setIsZoomOpen(false);
         setLoading(false);
       })
       .catch((err) => {
@@ -26,6 +31,15 @@ export default function ProductDetail() {
         setLoading(false);
       });
   }, [id]);
+
+  useEffect(() => {
+    if (!isZoomOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setIsZoomOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isZoomOpen]);
 
   if (loading) {
     return (
@@ -59,6 +73,9 @@ export default function ProductDetail() {
     }).format(value);
   };
 
+  const images = getProductImages(product);
+  const selectedImage = images[selectedImageIndex] || product.image;
+
   const handleIncrement = () => {
     if (quantity < (product.stock || 99)) {
       setQuantity(quantity + 1);
@@ -89,13 +106,41 @@ export default function ProductDetail() {
       {/* Main Split Layout */}
       <div className="grid md:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-none border border-gray-200 p-4 sm:p-8 lg:p-10 shadow-xs">
         
-        {/* Left Column: Image */}
-        <div className="md:col-span-6 flex items-center justify-center bg-white rounded-none overflow-hidden aspect-square border border-gray-200 p-6">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-contain max-h-[450px]"
-          />
+        {/* Left Column: Image gallery */}
+        <div className="md:col-span-6 min-w-0 space-y-3">
+          <div className="relative flex items-center justify-center bg-white rounded-none overflow-hidden aspect-square border border-gray-200 p-4 sm:p-6">
+            <img
+              src={selectedImage}
+              alt={product.name}
+              className="w-full h-full object-contain max-h-[450px]"
+              onError={() => setSelectedImageIndex(0)}
+            />
+            <button
+              type="button"
+              onClick={() => setIsZoomOpen(true)}
+              className="absolute right-3 top-3 inline-flex items-center justify-center w-10 h-10 bg-white/95 border border-gray-300 text-[#352820] hover:bg-[#352820] hover:text-[#f0dc78] transition-colors cursor-pointer"
+              aria-label="Ampliar imagen"
+              title="Ampliar imagen"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
+          {images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Imágenes del producto">
+              {images.map((image, index) => (
+                <button
+                  key={`${image}-${index}`}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`shrink-0 w-16 h-16 sm:w-20 sm:h-20 border p-1 bg-white transition-colors cursor-pointer ${selectedImageIndex === index ? 'border-[#352820] ring-2 ring-[#d3ad2f]' : 'border-gray-200 hover:border-[#a78665]'}`}
+                  aria-label={`Ver imagen ${index + 1}`}
+                  aria-current={selectedImageIndex === index ? 'true' : undefined}
+                >
+                  <img src={image} alt="" className="w-full h-full object-contain" onError={(event) => { event.currentTarget.style.opacity = '0.35'; }} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right Column: details */}
@@ -205,6 +250,32 @@ export default function ProductDetail() {
           </div>
         </div>
       </div>
+      {isZoomOpen && (
+        <div
+          className="fixed inset-0 z-[70] bg-[#352820]/85 flex items-center justify-center p-4 sm:p-8"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Imagen ampliada de ${product.name}`}
+          onClick={() => setIsZoomOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setIsZoomOpen(false)}
+            className="absolute right-4 top-4 inline-flex items-center justify-center w-11 h-11 bg-white text-[#352820] hover:bg-[#f0dc78] cursor-pointer"
+            aria-label="Cerrar imagen ampliada"
+            title="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={selectedImage}
+            alt={product.name}
+            className="max-w-full max-h-[90dvh] object-contain"
+            onClick={(event) => event.stopPropagation()}
+            onError={() => setSelectedImageIndex(0)}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowRight, Loader2, Pencil, Save, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowRight, GripVertical, Loader2, Pencil, Save, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
@@ -22,6 +22,9 @@ export default function Hero() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [panelPosition, setPanelPosition] = useState(null);
+  const panelRef = useRef(null);
+  const dragRef = useRef(null);
 
   useEffect(() => {
     let ignore = false;
@@ -49,6 +52,7 @@ export default function Hero() {
   const startEditing = () => {
     setDraft(content);
     setFeedback('');
+    setPanelPosition(null);
     setIsEditing(true);
   };
 
@@ -56,6 +60,7 @@ export default function Hero() {
     setDraft(content);
     setFeedback('');
     setIsEditing(false);
+    setPanelPosition(null);
   };
 
   const saveContent = async () => {
@@ -66,10 +71,46 @@ export default function Hero() {
       setContent(savedContent);
       setDraft(savedContent);
       setIsEditing(false);
+      setPanelPosition(null);
     } catch (error) {
       setFeedback(error.message || 'No se pudo guardar el banner.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const startPanelDrag = (event) => {
+    if (event.button !== 0 || !panelRef.current || event.target.closest('button')) return;
+    const bounds = panelRef.current.getBoundingClientRect();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.currentTarget.classList.add('cursor-grabbing');
+  };
+
+  const movePanel = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const maxLeft = Math.max(16, window.innerWidth - drag.width - 16);
+    const maxTop = Math.max(16, window.innerHeight - drag.height - 16);
+    setPanelPosition({
+      left: Math.min(Math.max(16, drag.left + event.clientX - drag.startX), maxLeft),
+      top: Math.min(Math.max(16, drag.top + event.clientY - drag.startY), maxTop),
+    });
+  };
+
+  const stopPanelDrag = (event) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      event.currentTarget.classList.remove('cursor-grabbing');
     }
   };
 
@@ -101,68 +142,6 @@ export default function Hero() {
               <ArrowRight className="h-6 w-6" strokeWidth={1.8} />
             </Link>
 
-            {isEditing && (
-              <div className="mt-7 border border-[#d8b437]/50 bg-white/95 p-4 text-left shadow-premium">
-                <label className="label-xs" htmlFor="hero-eyebrow">Franja superior</label>
-                <input
-                  id="hero-eyebrow"
-                  className="mb-4 w-full border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]"
-                  maxLength={140}
-                  value={draft.eyebrow}
-                  onChange={(event) => setDraft((current) => ({ ...current, eyebrow: event.target.value }))}
-                />
-
-                <label className="label-xs" htmlFor="hero-title">Frase destacada de la franja</label>
-                <input
-                  id="hero-title"
-                  className="mb-4 w-full border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]"
-                  maxLength={220}
-                  value={draft.title}
-                  onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                />
-
-                <label className="label-xs" htmlFor="hero-kicker">Etiqueta superior del hero</label>
-                <input
-                  id="hero-kicker"
-                  className="mb-4 w-full border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]"
-                  maxLength={100}
-                  value={draft.kicker}
-                  onChange={(event) => setDraft((current) => ({ ...current, kicker: event.target.value }))}
-                />
-
-                <label className="label-xs" htmlFor="hero-body">Texto grande del banner</label>
-                <textarea
-                  id="hero-body"
-                  className="min-h-32 w-full resize-none border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]"
-                  maxLength={320}
-                  value={draft.body}
-                  onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
-                />
-
-                {feedback && <p className="mt-3 text-sm font-semibold text-[#947516]">{feedback}</p>}
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={saveContent}
-                    disabled={isSaving || !draft.eyebrow.trim() || !draft.title.trim() || !draft.kicker.trim() || !draft.body.trim()}
-                    className="inline-flex items-center gap-2 bg-[#352820] px-4 py-2 text-sm font-bold text-white hover:bg-[#4b382b] disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Guardar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEditing}
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-2 border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-[#352820] hover:border-[#d3ad2f] hover:text-[#705812] disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    <X className="h-4 w-4" />
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="relative flex min-h-[430px] items-end justify-center lg:min-h-[700px]">
@@ -187,6 +166,54 @@ export default function Hero() {
           )}
         </div>
       </section>
+      {isAdmin && isEditing && (
+        <div
+          ref={panelRef}
+          className="fixed z-[80] w-[min(92vw,420px)] max-h-[calc(100dvh-6rem)] overflow-y-auto border border-[#d8b437] bg-white text-left shadow-2xl"
+          style={panelPosition ? { left: panelPosition.left, top: panelPosition.top } : { right: '1rem', top: '5.5rem' }}
+        >
+          <div
+            className="flex touch-none cursor-grab items-center justify-between gap-3 border-b border-[#d8b437]/50 bg-[#352820] px-4 py-3 text-[#f0dc78]"
+            onPointerDown={startPanelDrag}
+            onPointerMove={movePanel}
+            onPointerUp={stopPanelDrag}
+            onPointerCancel={stopPanelDrag}
+          >
+            <div className="flex items-center gap-2">
+              <GripVertical className="h-4 w-4 text-white/70" aria-hidden="true" />
+              <p className="text-sm font-extrabold">Editar banner</p>
+            </div>
+            <button type="button" onClick={cancelEditing} disabled={isSaving} className="inline-flex h-8 w-8 items-center justify-center text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-50" title="Cerrar editor" aria-label="Cerrar editor">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <label className="label-xs" htmlFor="hero-eyebrow">Franja superior</label>
+            <input id="hero-eyebrow" className="mb-4 w-full border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]" maxLength={140} value={draft.eyebrow} onChange={(event) => setDraft((current) => ({ ...current, eyebrow: event.target.value }))} />
+
+            <label className="label-xs" htmlFor="hero-title">Frase destacada de la franja</label>
+            <input id="hero-title" className="mb-4 w-full border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]" maxLength={220} value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} />
+
+            <label className="label-xs" htmlFor="hero-kicker">Etiqueta superior del hero</label>
+            <input id="hero-kicker" className="mb-4 w-full border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]" maxLength={100} value={draft.kicker} onChange={(event) => setDraft((current) => ({ ...current, kicker: event.target.value }))} />
+
+            <label className="label-xs" htmlFor="hero-body">Texto grande del banner</label>
+            <textarea id="hero-body" className="min-h-32 w-full resize-none border border-gray-200 bg-white px-3 py-2 text-sm text-[#352820] outline-none focus:border-[#d3ad2f] focus:ring-2 focus:ring-[#f0dc78]" maxLength={320} value={draft.body} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} />
+
+            {feedback && <p className="mt-3 text-sm font-semibold text-[#947516]">{feedback}</p>}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button type="button" onClick={saveContent} disabled={isSaving || !draft.eyebrow.trim() || !draft.title.trim() || !draft.kicker.trim() || !draft.body.trim()} className="inline-flex items-center gap-2 bg-[#352820] px-4 py-2 text-sm font-bold text-white hover:bg-[#4b382b] disabled:cursor-not-allowed disabled:opacity-70">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar
+              </button>
+              <button type="button" onClick={cancelEditing} disabled={isSaving} className="inline-flex items-center gap-2 border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-[#352820] hover:border-[#d3ad2f] hover:text-[#705812] disabled:cursor-not-allowed disabled:opacity-70">
+                <X className="h-4 w-4" /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="h-7 w-full bg-[#a57a13]" aria-hidden="true" />
     </>
   );

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS productos (
   stock INTEGER NOT NULL DEFAULT 0,
   categoria VARCHAR(100) NOT NULL REFERENCES categorias(nombre),
   imagen_url TEXT,
+  imagenes TEXT,
   activo BOOLEAN NOT NULL DEFAULT TRUE,
   destacado BOOLEAN NOT NULL DEFAULT FALSE,
   orden INTEGER NOT NULL DEFAULT 0

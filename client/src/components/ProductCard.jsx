@@ -1,10 +1,34 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart, CheckCircle2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { getProductImages } from '../utils/productImages';
 
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
+  const images = useMemo(() => getProductImages(product), [product]);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [activeImage, setActiveImage] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const previewTimer = useRef(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener?.('change', updatePreference);
+    return () => mediaQuery.removeEventListener?.('change', updatePreference);
+  }, []);
+
+  useEffect(() => {
+    if (!isPreviewing || prefersReducedMotion || images.length < 2) return undefined;
+    previewTimer.current = window.setInterval(() => {
+      setActiveImage((current) => (current + 1) % images.length);
+    }, 1400);
+    return () => window.clearInterval(previewTimer.current);
+  }, [images.length, isPreviewing, prefersReducedMotion]);
+
+  useEffect(() => () => window.clearInterval(previewTimer.current), []);
 
   const formatPrice = (value) => {
     return new Intl.NumberFormat('es-AR', {
@@ -21,10 +45,22 @@ export default function ProductCard({ product }) {
   };
 
   const isOutOfStock = Number(product.stock) <= 0;
+  const visibleImage = images[activeImage] || product.image;
+  const startPreview = () => {
+    if (images.length > 1 && !prefersReducedMotion) setIsPreviewing(true);
+  };
+  const stopPreview = () => {
+    setIsPreviewing(false);
+    setActiveImage(0);
+  };
 
   return (
     <Link
       to={`/product/${product.id}`}
+      onMouseEnter={startPreview}
+      onMouseLeave={stopPreview}
+      onFocus={startPreview}
+      onBlur={stopPreview}
       className="group bg-white rounded-none border border-[#352820]/20 hover:border-[#352820] shadow-sm hover:shadow-xl transition-all duration-200 flex flex-col overflow-hidden text-left relative"
     >
       {/* ─── Imagen de Producto (llena todo el bloque sin padding) ─── */}
@@ -50,12 +86,13 @@ export default function ProductCard({ product }) {
 
         {/* Fotografía cubriendo todo el espacio */}
         <img
-          src={product.image}
+          src={visibleImage}
           alt={product.name}
           className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${
             isOutOfStock ? 'opacity-50 grayscale-[30%]' : ''
           }`}
           loading="lazy"
+          onError={() => setActiveImage(0)}
         />
       </div>
 

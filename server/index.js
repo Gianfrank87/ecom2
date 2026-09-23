@@ -82,6 +82,20 @@ const isValidImageUrl = (value) => {
     return false;
   }
 };
+const normalizeImageUrls = (images, legacyImage) => {
+  const source = Array.isArray(images) ? images : legacyImage ? [legacyImage] : [];
+  return [...new Set(source
+    .map((value) => String(value || '').trim())
+    .filter(Boolean))];
+};
+const parseStoredImageUrls = (value, legacyImage) => {
+  let stored = [];
+  if (Array.isArray(value)) stored = value;
+  else if (typeof value === 'string' && value.trim()) {
+    try { stored = JSON.parse(value); } catch { stored = []; }
+  }
+  return normalizeImageUrls(stored.length ? stored : undefined, legacyImage);
+};
 const internalError = (res, err) => {
   if (err) console.error('Error interno del servidor:', err);
   return res.status(500).json({ error: 'Error interno del servidor.' });
@@ -208,18 +222,22 @@ const requireClient = (req, res, next) => {
 };
 
 // Helper: map product row to frontend shape
-const mapProduct = (p) => ({
-  id: String(p.id),
-  name: p.nombre,
-  description: p.descripcion,
-  price: Number(p.precio),
-  stock: p.stock,
-  category: p.categoria,
-  image: p.imagen_url,
-  featured: Boolean(p.destacado),
-  activo: Boolean(p.activo),
-  orden: p.orden !== undefined && p.orden !== null ? Number(p.orden) : Number(p.id)
-});
+const mapProduct = (p) => {
+  const images = parseStoredImageUrls(p.imagenes, p.imagen_url);
+  return {
+    id: String(p.id),
+    name: p.nombre,
+    description: p.descripcion,
+    price: Number(p.precio),
+    stock: p.stock,
+    category: p.categoria,
+    image: images[0] || p.imagen_url || '',
+    images,
+    featured: Boolean(p.destacado),
+    activo: Boolean(p.activo),
+    orden: p.orden !== undefined && p.orden !== null ? Number(p.orden) : Number(p.id)
+  };
+};
 
 const mapOffer = async (o) => {
   const ids = JSON.parse(o.producto_ids || '[]');
@@ -494,7 +512,7 @@ app.get('/api/products/:id', async (req, res) => {
 // POST /api/products (protected)
 app.post('/api/products', requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, stock, category, image, featured } = req.body;
+    const { name, description, price, stock, category, image, images, featured } = req.body;
     if (!name || !price || !category) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precio, categoría)' });
     }
@@ -502,15 +520,16 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     const normalizedCategory = String(category).trim().toLowerCase();
     const numericPrice = Number(price);
     const numericStock = Number(stock);
-    if (String(name).trim().length > 120 || String(description || '').length > 5000 || !isValidImageUrl(image) || !allowedCategories.has(normalizedCategory) || !Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isInteger(numericStock) || numericStock < 0) {
+    const imageUrls = normalizeImageUrls(images, image);
+    if (String(name).trim().length > 120 || String(description || '').length > 5000 || imageUrls.length === 0 || imageUrls.some((url) => !isValidImageUrl(url)) || !allowedCategories.has(normalizedCategory) || !Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isInteger(numericStock) || numericStock < 0) {
       return res.status(400).json({ error: 'Datos de producto inválidos.' });
     }
     const maxOrdenRow = await dbGet('SELECT COALESCE(MAX(orden), 0) as maxOrden FROM productos');
     const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
-      `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, destacado, activo, orden)
-       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?) RETURNING id`,
-      [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, image, Boolean(featured), nextOrden]
+      `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, imagenes, destacado, activo, orden)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?) RETURNING id`,
+      [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, imageUrls[0], JSON.stringify(imageUrls), Boolean(featured), nextOrden]
     );
     const newProductId = result.rows?.[0]?.id ?? result.lastID;
     res.status(201).json({ id: String(newProductId), message: 'Producto creado exitosamente' });
@@ -539,7 +558,7 @@ app.patch('/api/products/reorder', requireAdmin, async (req, res) => {
 // PUT /api/products/:id (protected)
 app.put('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, stock, category, image, featured } = req.body;
+    const { name, description, price, stock, category, image, images, featured } = req.body;
     if (!name || !price || !category) {
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
     }
@@ -548,12 +567,13 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
     const normalizedCategory = String(category).trim().toLowerCase();
     const numericPrice = Number(price);
     const numericStock = Number(stock);
-    if (String(name).trim().length > 120 || String(description || '').length > 5000 || !isValidImageUrl(image) || !allowedCategories.has(normalizedCategory) || !Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isInteger(numericStock) || numericStock < 0) {
+    const imageUrls = normalizeImageUrls(images, image);
+    if (String(name).trim().length > 120 || String(description || '').length > 5000 || imageUrls.length === 0 || imageUrls.some((url) => !isValidImageUrl(url)) || !allowedCategories.has(normalizedCategory) || !Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isInteger(numericStock) || numericStock < 0) {
       return res.status(400).json({ error: 'Datos de producto inválidos.' });
     }
     await dbRun(
-      `UPDATE productos SET nombre=?, descripcion=?, precio=?, stock=?, categoria=?, imagen_url=?, destacado=? WHERE id=?`,
-      [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, image, Boolean(featured), req.params.id]
+      `UPDATE productos SET nombre=?, descripcion=?, precio=?, stock=?, categoria=?, imagen_url=?, imagenes=?, destacado=? WHERE id=?`,
+      [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, imageUrls[0], JSON.stringify(imageUrls), Boolean(featured), req.params.id]
     );
     if (Number(stock) === 0) await deactivateOffersForProduct(check.id, name);
     res.json({ message: 'Producto actualizado exitosamente' });
@@ -1445,6 +1465,7 @@ app.post('/api/shipping/quote', (req, res) => {
 // ─────────────────────────────────────────
 const ensureDatabaseSchema = async () => {
   try {
+    await dbRun('ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagenes TEXT');
     await dbRun(`
       DO $$
       DECLARE
