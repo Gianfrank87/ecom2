@@ -83,7 +83,7 @@ function OrderStepper({ status }) {
               </span>
               <span className={`mt-1.5 text-[9px] font-extrabold uppercase leading-tight ${index <= activeIndex ? 'text-[#352820]' : 'text-gray-500'}`}>{step}</span>
             </div>
-            {index < steps.length - 1 && <div className={`mt-3 h-0.5 flex-1 ${index < activeIndex ? 'bg-[#352820]' : 'bg-gray-300'}`} />}
+            {index < steps.length - 1 && <div className={`mt-3 h-0.5 w-3 sm:w-auto sm:flex-1 ${index < activeIndex ? 'bg-[#352820]' : 'bg-gray-300'}`} />}
           </React.Fragment>
         ))}
       </div>
@@ -146,8 +146,8 @@ function MessageThread({ order, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-none border border-[#352820] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-left">
+    <div className="fixed inset-0 z-[60] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-lg rounded-none border border-[#352820] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh] text-left">
         <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-200 bg-gray-50">
           <div>
             <h2 className="font-extrabold text-base text-[#352820] flex items-center gap-2">
@@ -160,7 +160,7 @@ function MessageThread({ order, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50 min-h-[240px]">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50 min-h-0 sm:min-h-[min(240px,30dvh)]">
           {loading ? (
             <p className="text-center text-xs text-gray-500 py-10 font-bold">Cargando mensajes...</p>
           ) : messages.length === 0 ? (
@@ -193,7 +193,7 @@ function MessageThread({ order, onClose }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-3 border-t border-gray-200 bg-white flex gap-2">
-            <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="Escribí tu mensaje..." rows="2" maxLength="2000" className="flex-1 resize-none px-3 py-2 rounded-none border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#352820] focus:border-[#352820] text-xs font-semibold text-[#352820]" />
+            <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="Escribí tu mensaje..." rows="2" maxLength="2000" className="min-w-0 flex-1 resize-none px-3 py-2 rounded-none border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#352820] focus:border-[#352820] text-xs font-semibold text-[#352820]" />
             <button type="submit" disabled={sending || !content.trim()} className="self-end p-3 rounded-none bg-[#352820] hover:bg-[#4b382b] disabled:opacity-40 text-[#f0dc78] cursor-pointer disabled:cursor-not-allowed" title="Enviar mensaje" aria-label="Enviar mensaje">
               <Send className="w-4 h-4" />
             </button>
@@ -212,7 +212,7 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
     <div className="bg-white border border-[#352820]/30 rounded-none shadow-sm overflow-hidden transition-all duration-200 text-left">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
           <div className="w-9 h-9 rounded-none bg-[#352820] border border-[#352820] flex items-center justify-center shrink-0 text-[#f0dc78]">
             <Package className="w-5 h-5" />
           </div>
@@ -224,7 +224,7 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none text-xs font-bold border ${status.classes}`}>
             <span className={`w-1.5 h-1.5 ${status.dot}`} />
             {status.label}
@@ -274,7 +274,7 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
         <div className="border-t border-gray-200 bg-gray-50 px-4 py-4 space-y-3">
           <p className="text-xs font-extrabold text-[#352820] uppercase tracking-wider mb-2">Productos del pedido</p>
           {order.items.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-3">
+            <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-3">
               <div className="w-10 h-10 rounded-none overflow-hidden border border-gray-300 bg-white shrink-0">
                 {item.producto_imagen ? (
                   <img src={item.producto_imagen} alt={item.producto_nombre} className="w-full h-full object-cover" />
@@ -304,7 +304,7 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
 }
 
 export default function ClientOrders() {
-  const { clientUser, clientToken, clientLogout } = useClientAuth();
+  const { clientUser, clientToken, clientLogout, authLoading } = useClientAuth();
   const { clearCart } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
@@ -322,6 +322,7 @@ export default function ClientOrders() {
   }, [location.search, clearCart]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!clientUser) {
       navigate('/login', { state: { from: '/mis-pedidos', message: 'Iniciá sesión para ver tus pedidos.' } });
       return;
@@ -337,7 +338,7 @@ export default function ClientOrders() {
         setError(err.message);
       })
       .finally(() => setLoading(false));
-  }, [clientUser, clientToken, navigate, clientLogout]);
+  }, [authLoading, clientUser, clientToken, navigate, clientLogout]);
 
   if (loading) {
     return (

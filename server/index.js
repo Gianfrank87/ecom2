@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
 import { MercadoPagoConfig, Preference, Payment, WebhookSignatureValidator } from 'mercadopago';
 import { searchLocalities, calculateShippingQuote } from './services/shippingService.js';
+import { sendWelcomeEmail } from './services/mailer.js';
 
 dotenv.config();
 
@@ -407,6 +408,11 @@ app.post('/api/clients/register', authLimiter, async (req, res) => {
       signingSecret,
       { expiresIn: '7d' }
     );
+
+    // Enviar email de bienvenida en segundo plano sin ralentizar la respuesta HTTP
+    sendWelcomeEmail({ email: normalizedEmail, name: normalizedName }).catch(err => {
+      console.error('[MAILER REGISTER] Error background email:', err);
+    });
 
     res.status(201).json({
       token,

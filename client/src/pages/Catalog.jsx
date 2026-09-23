@@ -161,14 +161,14 @@ export default function Catalog() {
           </div>
 
           {/* Selector de Ordenamiento ("Ordenar") */}
-          <div className="flex items-center gap-2 self-end md:self-auto">
+          <div className="flex min-w-0 w-full sm:w-auto items-center gap-2 self-end md:self-auto">
             <span className="text-xs font-extrabold text-[#352820] flex items-center gap-1">
               <ArrowUpDown className="w-3.5 h-3.5 text-[#352820]" /> Ordenar:
             </span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2.5 bg-white text-[#352820] font-extrabold text-xs border border-[#352820]/40 focus:outline-none focus:border-[#352820] rounded-none cursor-pointer shadow-xs"
+              className="min-w-0 flex-1 sm:flex-none px-2 sm:px-4 py-2.5 bg-white text-[#352820] font-extrabold text-xs border border-[#352820]/40 focus:outline-none focus:border-[#352820] rounded-none cursor-pointer shadow-xs"
             >
               <option value="default">Por posición por defecto</option>
               <option value="priceAsc">Precio: Menor a Mayor</option>
@@ -190,7 +190,7 @@ export default function Catalog() {
                 key={cat.id}
                 type="button"
                 onClick={() => handleCategoryChange(cat.id)}
-                className={`px-4 py-1.5 rounded-none text-xs font-black tracking-wide transition-all cursor-pointer border ${
+                className={`min-h-11 sm:min-h-0 px-4 py-1.5 rounded-none text-xs font-black tracking-wide transition-all cursor-pointer border ${
                   isActive
                     ? 'bg-[#352820] text-[#f0dc78] border-[#352820] shadow-xs'
                     : 'bg-white hover:bg-amber-50 text-[#352820] border-[#352820]/30'
@@ -215,7 +215,7 @@ export default function Catalog() {
             <div className="flex justify-between items-center mb-4 text-xs font-extrabold text-[#352820]">
               <span>Mostrando {filteredProducts.length} productos</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
               {filteredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}

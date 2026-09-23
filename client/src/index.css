@@ -56,6 +56,13 @@
     color: #352820;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Keep long product names and form controls inside narrow layouts. */
+  @media (max-width: 767px) {
+    button, a, input, select, textarea { touch-action: manipulation; }
+    p, h1, h2, h3, h4, li { overflow-wrap: anywhere; }
+    section[id] { scroll-margin-top: 90px; }
+  }
   
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
@@ -100,6 +107,21 @@
   height: 48%;
   border-radius: 50%;
   box-shadow: 150px 0 0 rgba(218, 198, 169, 0.58);
+}
+
+/* Prevent focus zoom on phones; desktop typography remains unchanged. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']), select, textarea {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+  }
+  .cart-drawer button { min-width: 44px; min-height: 44px; }
+  .cart-drawer > :first-child { flex-shrink: 0; }
+  .cart-drawer > :last-child {
+    flex-shrink: 0;
+    padding-bottom: max(20px, env(safe-area-inset-bottom)) !important;
+  }
 }
 
 /* Micro-animations and Utilities */

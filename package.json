@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "local:setup": "node scripts/local-environment.mjs setup",
+    "local:stop": "node scripts/local-environment.mjs stop",
+    "dev:local": "node scripts/local-environment.mjs dev",
+    "dev:server:local": "node scripts/local-environment.mjs server",
     "dev": "cd client && vite",
     "dev:local": "node scripts/dev-local.mjs",
     "build": "cd client && vite build",

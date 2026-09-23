@@ -96,7 +96,7 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
           {['collares','correas','alimentos','juguetes','consejos'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
         </select>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label-xs">Precio (ARS)</label>
           <input type="number" name="price" value={formData.price} onChange={handleChange} placeholder="0"
@@ -249,7 +249,7 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback, onSto
         {errors.producto_ids && <p className="err">{errors.producto_ids}</p>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label-xs">Tipo de Oferta</label>
           <select value={form.tipo_descuento} onChange={e => setForm(f => ({...f, tipo_descuento: e.target.value}))}
@@ -441,8 +441,8 @@ function AdminMessageThread({ thread, onClose, onSent }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-none border border-[#352820] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-lg rounded-none border border-[#352820] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh]">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <div>
             <h2 className="font-extrabold text-lg text-gray-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#352820]" /> Pedido #{thread.pedido_id}</h2>
@@ -450,7 +450,7 @@ function AdminMessageThread({ thread, onClose, onSent }) {
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-none text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer" title="Cerrar"><X className="w-5 h-5" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-gray-50 min-h-[240px]">
+        <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-gray-50 min-h-0 sm:min-h-[min(240px,30dvh)]">
           {messages.map(message => message.tipo === 'sistema' ? (
             <div key={message.id} className="text-center py-2"><span className="inline-block px-3 py-1.5 rounded-none bg-gray-100 text-gray-500 text-xs italic border border-gray-200">{message.contenido}</span></div>
           ) : (
@@ -466,8 +466,8 @@ function AdminMessageThread({ thread, onClose, onSent }) {
         {closed ? (
           <div className="p-4 border-t border-gray-200 text-center text-xs font-bold text-gray-500">Este reclamo está cerrado.</div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 flex gap-2">
-            <textarea value={content} onChange={event => setContent(event.target.value)} placeholder="Escribí una respuesta..." rows="2" maxLength="2000" className="flex-1 resize-none px-3 py-2 rounded-none border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#352820] text-sm" />
+          <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 flex flex-wrap sm:flex-nowrap gap-2 [&_textarea]:max-sm:basis-full">
+            <textarea value={content} onChange={event => setContent(event.target.value)} placeholder="Escribí una respuesta..." rows="2" maxLength="2000" className="min-w-0 flex-1 resize-none px-3 py-2 rounded-none border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#352820] text-sm" />
             <button type="submit" disabled={sending || !content.trim()} className="self-end p-3 rounded-none bg-[#352820] hover:bg-[#4b382b] disabled:opacity-40 text-[#f0dc78] cursor-pointer disabled:cursor-not-allowed" title="Enviar respuesta" aria-label="Enviar respuesta"><Send className="w-4 h-4" /></button>
             <button type="button" onClick={handleCloseThread} className="self-end px-3 py-2.5 rounded-none bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-xs font-bold cursor-pointer">Cerrar definitivamente</button>
           </form>
@@ -758,7 +758,7 @@ export default function Admin() {
     return (
       <div className="max-w-md mx-auto my-12 px-4">
         <div className="bg-white border border-[#352820]/30 rounded-none p-8 shadow-xs text-left space-y-6">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
             <div className="w-12 h-12 bg-amber-100 rounded-none flex items-center justify-center text-[#352820] border border-amber-200">
               <ShieldCheck className="w-6 h-6" />
             </div>
@@ -787,7 +787,7 @@ export default function Admin() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {feedback && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-none shadow-lg border flex items-center gap-2 text-xs font-extrabold animate-bounce ${
+        <div className={`fixed bottom-4 left-4 right-4 sm:bottom-6 sm:left-auto sm:right-6 z-50 px-4 py-3 rounded-none shadow-lg border flex items-center gap-2 text-xs font-extrabold animate-bounce ${
           feedback.type === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
           feedback.type === 'error' ? 'bg-red-50 border-red-300 text-red-800' : 'bg-blue-50 border-blue-300 text-blue-800'
         }`}>
@@ -823,8 +823,8 @@ export default function Admin() {
       )}
 
       {editProduct && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-none border border-[#352820] p-6 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative text-left">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-none border border-[#352820] p-6 shadow-2xl max-w-lg w-full max-h-[90dvh] overflow-y-auto relative text-left">
             <button
               type="button"
               onClick={() => setEditProduct(null)}
@@ -938,7 +938,7 @@ export default function Admin() {
         return (
           <div className="grid lg:grid-cols-12 gap-8 items-start text-left">
             <div className="lg:col-span-4 rounded-none p-6 bg-white border border-gray-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap sm:flex-nowrap gap-3 sm:gap-0 items-center justify-between">
                 <h2 className="font-extrabold text-base text-gray-900 flex items-center gap-2">
                   <FileText className="w-5 h-5 text-[#352820]" />
                   Crear Nuevo Producto
@@ -952,7 +952,7 @@ export default function Admin() {
               />
             </div>
 
-            <div className="lg:col-span-8 bg-white border border-gray-200 rounded-none p-6 shadow-xs overflow-hidden">
+            <div className="min-w-0 lg:col-span-8 bg-white border border-gray-200 rounded-none p-6 shadow-xs overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
                 <div>
                   <h2 className="font-extrabold text-base text-gray-900">Listado de Productos ({filteredProducts.length})</h2>
@@ -961,7 +961,7 @@ export default function Admin() {
                   )}
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
                   <select 
                     value={stockFilter} 
                     onChange={e => setStockFilter(e.target.value)}
@@ -1033,14 +1033,14 @@ export default function Admin() {
 
       {activeTab === 'offers' && (
         <div className="grid lg:grid-cols-12 gap-8 items-start text-left">
-          <div className={`lg:col-span-4 rounded-none p-6 bg-white border transition-all duration-300 space-y-4 ${
+          <div className={`min-w-0 lg:col-span-4 rounded-none p-6 bg-white border transition-all duration-300 space-y-4 ${
             isShakingOffer ? 'animate-shake' : ''
           } ${
             editOffer
               ? 'border-2 border-[#d3ad2f] bg-amber-50/20 shadow-none'
               : 'border-gray-200 shadow-xs'
           }`}>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap sm:flex-nowrap gap-3 sm:gap-0 items-center justify-between">
               <h2 className="font-extrabold text-base text-gray-900 flex items-center gap-2">
                 <Tag className="w-5 h-5 text-[#352820]" />
                 {editOffer ? 'Editar Oferta' : 'Crear Nueva Oferta'}
@@ -1061,7 +1061,7 @@ export default function Admin() {
             />
           </div>
 
-          <div className="lg:col-span-8 space-y-4">
+          <div className="min-w-0 lg:col-span-8 space-y-4">
             {stockDeactivatedOffers.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-none p-3 text-amber-950">
                 <p className="text-xs font-black flex items-center gap-1.5">
@@ -1192,7 +1192,7 @@ export default function Admin() {
                 ))}
               </div>
             )}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap sm:flex-nowrap gap-3 sm:gap-0 items-center justify-between">
               <h2 className="font-extrabold text-base text-gray-900">
                 Historial de Ventas
               </h2>
@@ -1253,7 +1253,7 @@ export default function Admin() {
                 <div key={order.id} className="bg-white rounded-none border border-gray-200 p-5 flex flex-col md:flex-row gap-6 shadow-xs hover:shadow-sm transition-shadow">
                   
                   <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
                       <span className="text-xs font-black uppercase bg-[#352820] text-[#f0dc78] px-2 py-1 rounded-none">
                         PEDIDO #{order.id}
                       </span>

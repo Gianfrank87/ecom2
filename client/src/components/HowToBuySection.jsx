@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ShoppingBag,
   ShoppingCart,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   UserCheck,
   MapPin,
   CreditCard,
@@ -12,6 +14,8 @@ import {
 } from 'lucide-react';
 
 export default function HowToBuySection() {
+  const trackRef = useRef(null);
+  const [activeStep, setActiveStep] = useState(0);
   const steps = [
     {
       number: '01',
@@ -69,6 +73,25 @@ export default function HowToBuySection() {
     }
   ];
 
+  const goToStep = (index) => {
+    const track = trackRef.current;
+    const card = track?.children[index];
+    if (!card) return;
+    track.scrollTo({
+      left: card.offsetLeft - track.children[0].offsetLeft,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+    });
+  };
+
+  const syncActiveStep = () => {
+    const track = trackRef.current;
+    if (!track || track.scrollWidth <= track.clientWidth) return;
+    const start = track.children[0].offsetLeft;
+    const nearest = Array.from(track.children).reduce((best, card, index, cards) =>
+      Math.abs(card.offsetLeft - start - track.scrollLeft) < Math.abs(cards[best].offsetLeft - start - track.scrollLeft) ? index : best, 0);
+    setActiveStep(nearest);
+  };
+
   return (
     <section id="como-comprar-section" className="w-full bg-white py-16 px-4 sm:px-6 lg:px-8 border-b border-[#e8dfd0]">
       <div className="max-w-6xl mx-auto text-center">
@@ -83,14 +106,31 @@ export default function HowToBuySection() {
           Seguí estos sencillos pasos para realizar tu compra de forma fácil, transparente y 100% segura.
         </p>
 
-        {/* ─── Step Cards Grid ─── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12 text-left">
+        <p className="md:hidden text-xs text-[#4b382b] mt-5">Deslizá para ver el siguiente paso</p>
+
+        {/* Native swipe on phones; the existing desktop grid is preserved. */}
+        <div
+          id="purchase-steps"
+          ref={trackRef}
+          onScroll={syncActiveStep}
+          tabIndex={0}
+          role="region"
+          aria-label="Pasos para comprar"
+          onKeyDown={(event) => {
+            if (window.matchMedia('(min-width: 768px)').matches) return;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+              event.preventDefault();
+              goToStep(Math.max(0, Math.min(steps.length - 1, activeStep + (event.key === 'ArrowRight' ? 1 : -1))));
+            }
+          }}
+          className="relative flex overflow-x-auto snap-x snap-mandatory overscroll-x-contain md:grid md:overflow-visible md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mt-5 md:mt-12 text-left [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-[#d3ad2f] focus-visible:outline-offset-4"
+        >
           {steps.map((step) => {
             const IconComponent = step.icon;
             return (
               <div
                 key={step.number}
-                className="bg-[#fdfaf6] hover:bg-[#fdf6ea] border border-[#e8dfd0] hover:border-[#d3ad2f]/60 p-6 transition-all duration-300 hover:shadow-md group relative overflow-hidden flex flex-col justify-between"
+                className="w-full shrink-0 snap-start snap-always md:w-auto bg-[#fdfaf6] hover:bg-[#fdf6ea] border border-[#e8dfd0] hover:border-[#d3ad2f]/60 p-6 transition-all duration-300 hover:shadow-md group relative overflow-hidden flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between">
@@ -115,6 +155,20 @@ export default function HowToBuySection() {
               </div>
             );
           })}
+        </div>
+        <div className="md:hidden flex items-center justify-between gap-3 mt-4">
+          <button type="button" onClick={() => goToStep(activeStep - 1)} disabled={activeStep === 0} aria-label="Paso anterior" aria-controls="purchase-steps" className="w-11 h-11 flex items-center justify-center border border-[#352820] text-[#352820] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div className="space-y-2">
+            <p aria-live="polite" aria-atomic="true" className="text-xs font-bold text-[#352820]">Paso {activeStep + 1} de {steps.length}</p>
+            <div aria-hidden="true" className="flex justify-center gap-1.5">
+              {steps.map((step, index) => <span key={step.number} className={`h-1.5 w-1.5 rounded-full ${index === activeStep ? 'bg-[#352820]' : 'bg-[#d3ad2f]/35'}`} />)}
+            </div>
+          </div>
+          <button type="button" onClick={() => goToStep(activeStep + 1)} disabled={activeStep === steps.length - 1} aria-label="Paso siguiente" aria-controls="purchase-steps" className="w-11 h-11 flex items-center justify-center bg-[#352820] text-[#f0dc78] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
       </div>
     </section>

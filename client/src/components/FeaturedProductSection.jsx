@@ -75,9 +75,9 @@ function ProductCard({ product }) {
         </p>
 
         {/* Qty + Add to cart — full-width row */}
-        <div className="flex items-stretch gap-0 w-full">
+        <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-0 w-full">
           {/* Quantity */}
-          <div className="flex items-stretch border border-[#352820] bg-transparent shrink-0">
+          <div className="flex min-h-11 justify-center sm:justify-start items-stretch border border-[#352820] bg-transparent shrink-0">
             <button
               type="button"
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -104,7 +104,7 @@ function ProductCard({ product }) {
             type="button"
             onClick={handleAddToCart}
             disabled={product.stock <= 0}
-            className={`flex-1 h-11 font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer flex items-center justify-center border ${
+            className={`flex-1 min-h-11 sm:min-h-0 h-11 font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer flex items-center justify-center border ${
               product.stock > 0
                 ? 'bg-[#352820] hover:bg-[#4b382b] text-white border-[#352820]'
                 : 'bg-gray-300 text-gray-500 border-gray-300 cursor-not-allowed'
@@ -209,7 +209,7 @@ export default function FeaturedProductSection() {
         </div>
 
         {/* ── Carousel viewport with side arrows ── */}
-        <div className="flex items-center justify-between gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
           {/* Left arrow */}
           {total > 1 && (
             <button
@@ -218,7 +218,7 @@ export default function FeaturedProductSection() {
                 setAutoRotate(false);
                 setTimeout(() => setAutoRotate(true), 10000);
               }}
-              className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[#352820] hover:bg-[#4b382b] text-white transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-md"
+              className="justify-self-center shrink-0 w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-[#352820] hover:bg-[#4b382b] text-white transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-md"
               aria-label="Producto anterior"
             >
               <ChevronLeft className="w-6 h-6" />
@@ -226,7 +226,7 @@ export default function FeaturedProductSection() {
           )}
 
           {/* Carousel content */}
-          <div className="overflow-hidden flex-1">
+          <div className="col-span-2 row-start-1 min-w-0 overflow-hidden flex-1">
             <div
               className="flex transition-transform duration-500 ease-in-out"
               style={{ transform: `translateX(-${current * 100}%)` }}
@@ -245,7 +245,7 @@ export default function FeaturedProductSection() {
                 setAutoRotate(false);
                 setTimeout(() => setAutoRotate(true), 10000);
               }}
-              className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[#352820] hover:bg-[#4b382b] text-white transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-md"
+              className="justify-self-center shrink-0 w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-[#352820] hover:bg-[#4b382b] text-white transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-md"
               aria-label="Producto siguiente"
             >
               <ChevronRight className="w-6 h-6" />

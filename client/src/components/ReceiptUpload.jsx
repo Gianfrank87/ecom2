@@ -80,7 +80,7 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
         </div>
       </div>
       {(hasReceipt || uploaded) && (
-        <div className="flex items-center justify-between gap-3 rounded-none border border-emerald-200 bg-emerald-50 px-3 py-2">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 rounded-none border border-emerald-200 bg-emerald-50 px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
             <CheckCircle2 className="w-4 h-4" /> Comprobante enviado
           </span>
