@@ -24,8 +24,11 @@ if (!fs.existsSync(settingsFile)) {
 }
 const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
 const pgRoot = 'C:/Program Files/PostgreSQL';
-const pgBin = process.env.LOCAL_PG_BIN || (fs.existsSync(pgRoot)
-  ? path.join(pgRoot, fs.readdirSync(pgRoot).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0], 'bin') : '');
+const standardPgBin = fs.existsSync(pgRoot)
+  ? path.join(pgRoot, fs.readdirSync(pgRoot).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0], 'bin')
+  : '';
+const pgBin = process.env.LOCAL_PG_BIN
+  || (fs.existsSync('D:/POSTGRESQL/bin') ? 'D:/POSTGRESQL/bin' : standardPgBin);
 const executable = name => path.join(pgBin, `${name}${process.platform === 'win32' ? '.exe' : ''}`);
 const run = (name, args, allowFailure = false) => {
   const result = spawnSync(executable(name), args, {
