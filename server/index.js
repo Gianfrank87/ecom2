@@ -33,6 +33,23 @@ if (MP_ACCESS_TOKEN) {
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
 const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado']);
 const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
+const CONTENT_BLOCKS = {
+  'home-hero': {
+    configKey: 'content_home_hero',
+    defaults: {
+      eyebrow: 'Seguridad pensada para quienes forman parte de nuestra familia',
+      title: 'Diseñados para protegerlos. Porque verlos a tiempo hace la diferencia.',
+      kicker: 'Cada producto nace de una idea simple',
+      body: 'Más seguridad, comodidad y felicidad para ellos.',
+    },
+    fields: {
+      eyebrow: { maxLength: 140 },
+      title: { maxLength: 220 },
+      kicker: { maxLength: 100 },
+      body: { maxLength: 320 },
+    },
+  },
+};
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = path.join(serverDirectory, 'uploads', 'comprobantes');
 fs.mkdirSync(uploadsDirectory, { recursive: true });
@@ -125,6 +142,33 @@ const getBankConfig = async (query = { all: dbAll }) => {
   );
   const values = Object.fromEntries(rows.map((row) => [row.clave, row.valor]));
   return { alias: values.banco_alias || '', cbu: values.banco_cbu || '', titular: values.banco_titular || '' };
+};
+
+const normalizeContentBlock = (block, value = {}) => {
+  const nextContent = {};
+  for (const [field, rules] of Object.entries(block.fields)) {
+    const fallback = block.defaults[field] || '';
+    const nextValue = value[field] === undefined || value[field] === null ? fallback : String(value[field]).trim();
+    if (!nextValue || nextValue.length > rules.maxLength) {
+      throw Object.assign(new Error('Contenido inválido.'), { status: 400 });
+    }
+    nextContent[field] = nextValue;
+  }
+  return nextContent;
+};
+
+const getContentBlock = async (contentKey, query = { get: dbGet }) => {
+  const block = CONTENT_BLOCKS[contentKey];
+  if (!block) return null;
+
+  const row = await query.get('SELECT valor FROM configuraciones WHERE clave = ?', [block.configKey]);
+  if (!row?.valor) return block.defaults;
+
+  try {
+    return normalizeContentBlock(block, { ...block.defaults, ...JSON.parse(row.valor) });
+  } catch {
+    return block.defaults;
+  }
 };
 
 // Middleware: require an authenticated user with the admin role
@@ -635,6 +679,37 @@ app.put('/api/admin/config/banco', requireAdmin, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
+// GET /api/content/:key (public, allowlisted content blocks)
+app.get('/api/content/:key', async (req, res) => {
+  try {
+    const content = await getContentBlock(req.params.key);
+    if (!content) return res.status(404).json({ error: 'Contenido no encontrado.' });
+    res.json(content);
+  } catch (error) {
+    internalError(res);
+  }
+});
+
+// PUT /api/admin/content/:key (admin only)
+app.put('/api/admin/content/:key', requireAdmin, async (req, res) => {
+  try {
+    const block = CONTENT_BLOCKS[req.params.key];
+    if (!block) return res.status(404).json({ error: 'Contenido no encontrado.' });
+
+    const content = normalizeContentBlock(block, req.body || {});
+    await dbRun(
+      `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
+       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+       RETURNING 1 AS id`,
+      [block.configKey, JSON.stringify(content)]
+    );
+    res.json(content);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    internalError(res);
+  }
+});
+
 // OFFERS
 // ─────────────────────────────────────────
 

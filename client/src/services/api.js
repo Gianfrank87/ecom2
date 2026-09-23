@@ -367,6 +367,25 @@ export const api = {
       throw new Error(data.error || 'Error al cotizar el envío');
     }
     return res.json();
+  },
+
+  getContentBlock: async (key) => {
+    const res = await fetch(`${API_URL}/content/${encodeURIComponent(key)}`);
+    if (!res.ok) throw new Error('Error al obtener el contenido');
+    return res.json();
+  },
+
+  updateContentBlock: async (key, content) => {
+    const res = await fetch(`${API_URL}/admin/content/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(content)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al guardar el contenido');
+    }
+    return res.json();
   }
 };
 
