@@ -55,7 +55,18 @@ if (!fs.existsSync(path.join(data, 'PG_VERSION'))) {
   } finally { fs.unlinkSync(passwordFile); }
 }
 if (run('pg_ctl', ['-D', data, 'status'], true).status !== 0) {
-  run('pg_ctl', ['-D', data, '-l', path.join(local, 'postgres.log'), '-o', '-h 127.0.0.1 -p 55432', '-w', 'start']);
+  const start = run('pg_ctl', ['-D', data, '-l', path.join(local, 'postgres.log'), '-o', '-h 127.0.0.1 -p 55432', '-w', 'start'], true);
+  if (start.status !== 0) {
+    if (process.platform !== 'win32') throw Error(`pg_ctl: ${start.error?.message || start.stderr || start.stdout}`);
+    const postgres = spawn(executable('postgres'), ['-D', data, '-h', '127.0.0.1', '-p', '55432'], {
+      cwd: root,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    postgres.unref();
+    await new Promise(resolve => setTimeout(resolve, 1200));
+  }
 }
 
 const { Client } = requireServer('pg');
