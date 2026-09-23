@@ -254,15 +254,16 @@ export default function Navbar() {
       style={{ fontFamily: "'Plus Jakarta Sans', 'Open Sans', sans-serif" }}
     >
       {/* ─── Top Header Row (Search Icon, Centered Logo, Right Actions) ─── */}
-      <div className={`w-full px-6 lg:px-12 bg-white transition-all duration-300 ${isScrolled ? 'py-1.5' : 'py-3.5'}`}>
+      <div className={`w-full px-3 sm:px-6 lg:px-12 bg-white transition-all duration-300 ${isScrolled ? 'py-1.5' : 'py-3.5'}`}>
         <div className="flex items-center justify-between relative min-h-[40px]">
 
           {/* ─── LEFT: Search Toggle ─── */}
-          <div className="flex-1 flex justify-start items-center relative" ref={searchContainerRef}>
+          <div className="shrink-0 md:flex-1 flex justify-start items-center relative" ref={searchContainerRef}>
             <button
               type="button"
-              onClick={() => setIsSearchExpanded(!isSearchExpanded)}
-              className="p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors cursor-pointer"
+              onClick={() => { setIsSearchExpanded(!isSearchExpanded); setMobileMenuOpen(false); setUserMenuOpen(false); }}
+              aria-expanded={isSearchExpanded}
+              className="max-md:min-w-11 max-md:min-h-11 p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors cursor-pointer"
               aria-label="Buscar"
               title="Buscar productos"
             >
@@ -271,7 +272,7 @@ export default function Navbar() {
 
             {/* Expandable Search Input & Dropdown */}
             {isSearchExpanded && (
-              <div className="absolute top-full left-0 mt-2 w-72 sm:w-80 bg-white border border-[#352820]/30 rounded-none shadow-2xl p-2.5 z-50">
+              <div className="absolute top-full left-0 mt-2 w-[calc(100vw-24px)] sm:w-80 bg-white border border-[#352820]/30 rounded-none shadow-2xl p-2.5 z-50">
                 <form onSubmit={handleSearchSubmit} className="relative flex items-center">
                   <input
                     type="text"
@@ -321,7 +322,7 @@ export default function Navbar() {
           </div>
 
           {/* ─── CENTER: Logo ─── */}
-          <div className="flex-1 flex justify-center items-center">
+          <div className="min-w-0 flex-1 flex justify-center items-center">
             <Link
               to="/"
               onClick={handleLinkClick}
@@ -331,20 +332,21 @@ export default function Navbar() {
               <img
                 src={BRAND_LOGO}
                 alt="Logo de NIGDIZ"
-                className={`w-auto object-contain transition-all duration-300 ${isScrolled ? 'h-8 sm:h-9' : 'h-11 sm:h-13'
+                className={`max-w-full w-auto object-contain transition-all duration-300 ${isScrolled ? 'h-8 sm:h-9' : 'h-11 sm:h-13'
                   }`}
               />
             </Link>
           </div>
 
           {/* ─── RIGHT: User & Shopping Bag Icons ─── */}
-          <div className="flex-1 flex justify-end items-center gap-4 sm:gap-5">
+          <div className="shrink-0 md:flex-1 flex justify-end items-center gap-0 sm:gap-5">
             {/* User Dropdown / Icon */}
             {clientUser ? (
               <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors cursor-pointer relative group flex items-center"
+                  onClick={() => { setUserMenuOpen(!userMenuOpen); setMobileMenuOpen(false); setIsSearchExpanded(false); }}
+                  aria-expanded={userMenuOpen}
+                  className="max-md:min-w-11 max-md:min-h-11 p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors cursor-pointer relative group flex items-center"
                   aria-label={`Menú de usuario: ${clientUser.name}`}
                 >
                   <User className="w-5 h-5 stroke-[1.5]" />
@@ -362,7 +364,7 @@ export default function Navbar() {
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#352820]/30 rounded-none shadow-2xl py-2 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-56 max-md:fixed max-md:left-3 max-md:right-3 max-md:top-[72px] max-md:w-auto max-md:max-h-[calc(100dvh-88px)] overflow-y-auto bg-white border border-[#352820]/30 rounded-none shadow-2xl py-2 z-50">
                     <div className="px-4 py-3 border-b border-gray-100">
                       <p className="text-sm font-extrabold text-[#352820]">{clientUser.name}</p>
                       <p className="text-xs text-gray-500 truncate font-medium">{clientUser.email}</p>
@@ -424,7 +426,7 @@ export default function Navbar() {
 
               <Link
                 to="/login"
-                className="p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors"
+                className="max-md:min-w-11 max-md:min-h-11 p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors"
                 title="Iniciar Sesión"
               >
                 <User className="w-5 h-5 stroke-[1.5]" />
@@ -435,7 +437,7 @@ export default function Navbar() {
             {isAdmin && (
               <Link
                 to="/admin"
-                className="p-1.5 text-gray-700 hover:text-[#d3ad2f] transition-colors"
+                className="hidden md:block p-1.5 text-gray-700 hover:text-[#d3ad2f] transition-colors"
                 title="Panel Admin"
                 aria-label="Acceso al panel administrativo"
               >
@@ -446,7 +448,7 @@ export default function Navbar() {
             {/* Shopping Bag Button with Superscript Count */}
             <button
               onClick={toggleCartDrawer}
-              className="relative p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors flex items-center cursor-pointer"
+              className="max-md:min-w-11 max-md:min-h-11 relative p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors flex items-center cursor-pointer"
               aria-label="Abrir carrito"
             >
               <ShoppingBag className="w-5 h-5 stroke-[1.5]" />
@@ -457,8 +459,10 @@ export default function Navbar() {
 
             {/* Mobile Drawer Toggle */}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors cursor-pointer"
+              onClick={() => { setMobileMenuOpen(!mobileMenuOpen); setIsSearchExpanded(false); setUserMenuOpen(false); }}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-navigation"
+              className="md:hidden min-w-11 min-h-11 p-1.5 text-gray-800 hover:text-[#d3ad2f] transition-colors cursor-pointer"
               aria-label="Abrir menú"
             >
               {mobileMenuOpen ? <X className="w-6 h-6 stroke-[1.5]" /> : <Menu className="w-6 h-6 stroke-[1.5]" />}
@@ -493,7 +497,7 @@ export default function Navbar() {
 
       {/* ─── Mobile Menu Drawer ─── */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-200 bg-white py-4 px-4 space-y-3">
+        <div id="mobile-navigation" className="md:hidden absolute top-full left-0 w-full max-h-[calc(100dvh-72px)] overflow-y-auto overscroll-contain border-t border-gray-200 bg-white py-4 px-4 space-y-3 shadow-lg">
           {/* Mobile Search */}
           <div className="mb-4">
             <form onSubmit={handleSearchSubmit} className="relative">

@@ -59,6 +59,9 @@ export default function CartDrawer() {
       {/* Panel lateral */}
       <div
         ref={panelRef}
+        className="cart-drawer"
+        inert={!isCartDrawerOpen}
+        aria-hidden={!isCartDrawerOpen}
         role="dialog"
         aria-modal="true"
         aria-label="Carrito de compras"
@@ -66,7 +69,7 @@ export default function CartDrawer() {
           position: 'fixed',
           top: 0,
           right: 0,
-          bottom: 0,
+          height: '100dvh',
           zIndex: 9999,
           width: '100%',
           maxWidth: '400px',
@@ -138,7 +141,7 @@ export default function CartDrawer() {
         </div>
 
         {/* ── Body scrolleable ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+        <div style={{ flex: 1, minHeight: 0, overscrollBehavior: 'contain', overflowY: 'auto', padding: '12px 20px' }}>
           {cart.length === 0 ? (
             /* Estado vacío */
             <div

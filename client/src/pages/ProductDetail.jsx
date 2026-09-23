@@ -87,7 +87,7 @@ export default function ProductDetail() {
       </button>
 
       {/* Main Split Layout */}
-      <div className="grid md:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-none border border-gray-200 p-6 sm:p-8 lg:p-10 shadow-xs">
+      <div className="grid md:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-none border border-gray-200 p-4 sm:p-8 lg:p-10 shadow-xs">
         
         {/* Left Column: Image */}
         <div className="md:col-span-6 flex items-center justify-center bg-white rounded-none overflow-hidden aspect-square border border-gray-200 p-6">
@@ -99,7 +99,7 @@ export default function ProductDetail() {
         </div>
 
         {/* Right Column: details */}
-        <div className="md:col-span-6 flex flex-col justify-between text-left space-y-6">
+        <div className="min-w-0 md:col-span-6 flex flex-col justify-between text-left space-y-6">
           <div className="space-y-4">
             {/* Category */}
             <span className="inline-flex text-[10px] uppercase font-black tracking-wider px-3 py-1 rounded-none bg-[#352820] text-[#f0dc78] w-fit">
@@ -134,7 +134,7 @@ export default function ProductDetail() {
             <hr className="border-gray-100" />
             
             {/* Stock indicator */}
-            <div className="flex items-center gap-2 text-xs font-semibold">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
               <span className="text-gray-400 uppercase tracking-wider font-bold">Disponibilidad:</span>
               {product.stock > 0 ? (
                 <span className="text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-none border border-emerald-200 font-bold">
@@ -192,7 +192,7 @@ export default function ProductDetail() {
             )}
 
             {/* Extra Benefits Info */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <div className="flex items-center gap-2 p-3 rounded-none bg-gray-50 border border-gray-200 text-[11px] text-gray-700 font-semibold">
                 <Truck className="w-4 h-4 text-[#352820]" />
                 Envío gratis en compras seleccionadas

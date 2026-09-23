@@ -60,14 +60,14 @@ export default function ProductCard({ product }) {
       </div>
 
       {/* ─── Info del producto ─── */}
-      <div className="p-3.5 flex-grow flex flex-col justify-between gap-2 border-t border-[#352820]/10">
+      <div className="p-2.5 sm:p-3.5 flex-grow flex flex-col justify-between gap-2 border-t border-[#352820]/10">
         {/* Nombre */}
         <h3 className="font-extrabold text-[13px] text-[#352820] line-clamp-2 leading-tight group-hover:text-[#a78665] transition-colors min-h-[2.2rem]">
           {product.name}
         </h3>
 
         {/* Precio + stock */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap sm:flex-nowrap gap-1 sm:gap-0 items-center justify-between">
           <span className="font-black text-lg text-[#352820] tracking-tight">
             {formatPrice(product.price)}
           </span>
@@ -83,7 +83,7 @@ export default function ProductCard({ product }) {
           <button
             type="button"
             onClick={handleQuickAdd}
-            className="w-full py-2 bg-[#352820] hover:bg-[#4b382b] active:bg-[#251b15] text-[#f0dc78] font-black text-[11px] uppercase tracking-wider rounded-none transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-auto"
+            className="w-full min-h-11 sm:min-h-0 py-2 bg-[#352820] hover:bg-[#4b382b] active:bg-[#251b15] text-[#f0dc78] font-black text-[11px] uppercase tracking-wider rounded-none transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-auto"
           >
             <ShoppingCart className="w-3.5 h-3.5" /> Agregar
           </button>
@@ -91,7 +91,7 @@ export default function ProductCard({ product }) {
           <button
             type="button"
             disabled
-            className="w-full py-2 bg-gray-100 text-gray-400 font-bold text-[11px] uppercase tracking-wider rounded-none cursor-not-allowed border border-gray-200 mt-auto"
+            className="w-full min-h-11 sm:min-h-0 py-2 bg-gray-100 text-gray-400 font-bold text-[11px] uppercase tracking-wider rounded-none cursor-not-allowed border border-gray-200 mt-auto"
           >
             Sin Stock
           </button>

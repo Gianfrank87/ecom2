@@ -10,6 +10,7 @@ server/uploads/
 
 # Local database
 database.db
+.local/
 
 # Build output
 build/

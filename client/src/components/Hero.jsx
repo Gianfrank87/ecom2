@@ -16,11 +16,11 @@ export default function Hero() {
       </div>
 
       {/* ─── Full-width Dog Image Container (Height allows next section to peek subtly at the bottom) ─── */}
-      <div className="w-full relative overflow-hidden bg-[#f6efe2] flex justify-center items-center h-[calc(100vh-210px)] min-h-[400px] max-h-[680px]">
+      <div className="w-full relative overflow-hidden bg-[#f6efe2] flex justify-center items-center aspect-[4/3] sm:aspect-auto sm:h-[calc(100vh-210px)] sm:min-h-[400px] sm:max-h-[680px]">
         <img
           src={dogImage}
           alt="NIGDIZ Mascotas - Diseñados para protegerlos"
-          className="w-full h-full object-cover sm:object-contain object-top block transition-all"
+          className="w-full h-full object-contain object-top block transition-all"
         />
       </div>
     </section>

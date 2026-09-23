@@ -88,7 +88,7 @@ export default function OfertaCard({ offer }) {
 
       {/* Price block & Action */}
       <div className="pt-3 border-t border-gray-100 mt-auto">
-        <div className="flex items-baseline justify-between mb-3">
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-0 items-baseline justify-between mb-3">
           <div>
             {originalTotal > 0 && originalTotal !== offerPrice && (
               <span className="text-xs text-gray-400 line-through font-bold block mb-0.5">

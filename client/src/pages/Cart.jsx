@@ -262,9 +262,9 @@ export default function Cart() {
                 {bankConfigError && <p className="text-xs font-bold text-red-700">{bankConfigError}</p>}
                 {bankConfig && (
                   <>
-                    <p className="text-xs text-gray-700"><strong>Alias:</strong> {bankConfig.alias || 'No configurado'}</p>
-                    <p className="text-xs text-gray-700"><strong>CBU:</strong> {bankConfig.cbu || 'No configurado'}</p>
-                    <p className="text-xs text-gray-700"><strong>Titular:</strong> {bankConfig.titular || 'No configurado'}</p>
+                    <p className="text-xs text-gray-700 break-words"><strong>Alias:</strong> {bankConfig.alias || 'No configurado'}</p>
+                    <p className="text-xs text-gray-700 break-words"><strong>CBU:</strong> {bankConfig.cbu || 'No configurado'}</p>
+                    <p className="text-xs text-gray-700 break-words"><strong>Titular:</strong> {bankConfig.titular || 'No configurado'}</p>
                   </>
                 )}
               </div>
@@ -334,11 +334,11 @@ export default function Cart() {
       <div className="grid lg:grid-cols-12 gap-8 items-start">
 
         {/* Left Column: Item List */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="min-w-0 lg:col-span-7 space-y-4">
           {cart.map((item) => (
             <div
               key={item.id}
-              className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 shadow-xs relative"
+              className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 grid grid-cols-[64px_minmax(0,1fr)] sm:flex items-center gap-3 sm:gap-4 shadow-xs relative"
             >
               {/* Product Thumbnail */}
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-gray-50 border border-gray-200 shrink-0 p-1">
@@ -346,7 +346,7 @@ export default function Cart() {
               </div>
 
               {/* Product Details */}
-              <div className="flex-grow text-left pr-4">
+              <div className="min-w-0 flex-grow text-left sm:pr-4">
                 <span className="text-[9px] uppercase font-black tracking-widest text-[#e52521]">
                   {item.category}
                 </span>
@@ -362,12 +362,12 @@ export default function Cart() {
               </div>
 
               {/* Action Stepper & Delete */}
-              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 shrink-0 ml-auto">
+              <div className="col-span-2 flex flex-row items-center justify-between sm:justify-start gap-3 sm:gap-4 shrink-0 w-full sm:w-auto sm:ml-auto">
                 {/* Stepper */}
                 <div className="flex items-center border border-gray-200 rounded-lg p-0.5 bg-gray-50">
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-all cursor-pointer"
+                    className="min-w-11 min-h-11 sm:min-w-0 sm:min-h-0 p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-all cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -376,7 +376,7 @@ export default function Cart() {
                   </span>
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-all cursor-pointer"
+                    className="min-w-11 min-h-11 sm:min-w-0 sm:min-h-0 p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -401,7 +401,7 @@ export default function Cart() {
         </div>
 
         {/* Right Column: Order Form / Summary */}
-        <div className="lg:col-span-5 bg-white border border-gray-200 rounded-xl p-6 shadow-xs space-y-6 text-left">
+        <div className="min-w-0 lg:col-span-5 bg-white border border-gray-200 rounded-xl p-6 shadow-xs space-y-6 text-left">
           <h2 className="font-extrabold text-lg text-gray-900">Resumen de Compra</h2>
 
           <div className="space-y-3 text-sm font-semibold">
@@ -445,7 +445,7 @@ export default function Cart() {
               {/* Detalle de destino seleccionado */}
               {shippingQuote && (
                 <div className="bg-amber-50/60 border border-amber-200/70 rounded-lg p-2.5 space-y-1 text-left">
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-2">
                     <div className="text-[11px] leading-tight">
                       <span className="font-black text-gray-900 block">
                         Envío a {shippingQuote.destination.localidad}, {shippingQuote.destination.provincia}
@@ -646,7 +646,7 @@ export default function Cart() {
                 {formErrors.email && <p className="text-red-600 text-[10px] mt-1 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {formErrors.email}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1.5">Teléfono</label>
                   <input
