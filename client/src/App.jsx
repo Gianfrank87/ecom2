@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import { ClientAuthProvider } from './context/ClientAuthContext';
 import Navbar from './components/Navbar';
@@ -15,14 +15,14 @@ import ClientLogin from './pages/ClientLogin';
 import ClientRegister from './pages/ClientRegister';
 import ClientOrders from './pages/ClientOrders';
 
-export default function App() {
+function AppLayout() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
   return (
-    <ClientAuthProvider>
-      <CartProvider>
-        <Router>
-          <div className="flex flex-col min-h-screen">
-            <Navbar />
-            <CartDrawer />
+    <div className="flex flex-col min-h-screen">
+            {!isAdminRoute && <Navbar />}
+            {!isAdminRoute && <CartDrawer />}
             <main className="flex-grow">
               <Routes>
                 <Route path="/" element={<Home />} />
@@ -35,9 +35,18 @@ export default function App() {
                 <Route path="/mis-pedidos" element={<ClientOrders />} />
               </Routes>
             </main>
-            <Footer />
-            <WhatsAppFloat />
+            {!isAdminRoute && <Footer />}
+            {!isAdminRoute && <WhatsAppFloat />}
           </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ClientAuthProvider>
+      <CartProvider>
+        <Router>
+          <AppLayout />
         </Router>
       </CartProvider>
     </ClientAuthProvider>

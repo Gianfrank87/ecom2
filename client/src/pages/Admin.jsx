@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send, ArrowDown, ArrowUp } from 'lucide-react';
+import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, Clock, Truck, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send, ArrowDown, ArrowUp, Menu, Settings, ExternalLink, UserRound } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -829,6 +829,7 @@ export default function Admin() {
 
   const [activeTab, setActiveTab] = useState(new URLSearchParams(location.search).get('tab') || 'products');
   const [salesView, setSalesView] = useState('pending');
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
 
   const [products, setProducts] = useState([]);
   const [offers, setOffers] = useState([]);
@@ -846,6 +847,7 @@ export default function Admin() {
 
   const [feedback, setFeedback] = useState(null);
   const [stockWarning, setStockWarning] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!editProduct) return undefined;
@@ -1034,9 +1036,81 @@ export default function Admin() {
   const pendingReceiptOrders = orders.filter(o => o.metodo_pago === 'transferencia' && o.estado === 'esperando_aprobacion' && o.comprobante_url);
   const unreadMessagesCount = messages.reduce((total, thread) => total + (thread.no_leidos ?? 0), 0);
   const stockDeactivatedOffers = offers.filter(o => o.desactivada_por_stock);
+  const adminTabs = [
+    { id: 'products', label: 'Productos', icon: Package },
+    { id: 'offers', label: 'Ofertas', icon: Tag, badge: stockDeactivatedOffers.length || null },
+    { id: 'sales', label: 'Ventas', icon: ShoppingCart, badge: pendingOrdersCount || null },
+    { id: 'messages', label: 'Mensajes', icon: MessageCircle, badge: unreadMessagesCount || null },
+    { id: 'config', label: 'Configuración', icon: Settings },
+  ];
+  const activeSection = adminTabs.find((tab) => tab.id === activeTab) || adminTabs[0];
+  const sectionDescriptions = {
+    products: 'Gestioná el catálogo, el stock y el orden de publicación.',
+    offers: 'Creá promociones y controlá su disponibilidad.',
+    sales: 'Revisá pagos y seguí todos los pedidos de la tienda.',
+    messages: 'Respondé consultas y reclamos de tus clientes.',
+    config: 'Actualizá los datos generales y bancarios de la tienda.',
+  };
+  const adminInitials = String(clientUser?.name || 'Admin').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-[#f7f6f3] text-[#352820]">
+      <header className="sticky top-0 z-40 flex h-20 items-center border-b border-gray-200 bg-white px-4 sm:px-7">
+        <Link to="/" className="flex items-center gap-3" title="Volver a la tienda">
+          <img src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1788907250/copy_of_0eab9e86-bf10-4de7-8c39-d84f17317403.png" alt="NigDiz" className="h-11 w-11 object-contain" />
+          <div className="hidden sm:block">
+            <p className="text-xl font-black leading-none tracking-[0.16em] text-black">NIGDIZ</p>
+            <p className="mt-1 text-[9px] font-extrabold tracking-[0.38em] text-[#a78665]">ADMIN</p>
+          </div>
+        </Link>
+        <div className="ml-auto flex items-center gap-2 sm:gap-4">
+          <Link to="/" className="hidden items-center gap-2 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 sm:inline-flex"><ExternalLink className="h-4 w-4" /> Ver tienda</Link>
+          <button type="button" onClick={() => handleTabChange('messages')} className="relative p-2.5 text-[#352820] hover:bg-gray-100 cursor-pointer" aria-label="Mensajes"><MessageCircle className="h-5 w-5" />{unreadMessagesCount > 0 && <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d3ad2f] px-1 text-[10px] font-black">{unreadMessagesCount}</span>}</button>
+          <div className="hidden h-8 w-px bg-gray-200 sm:block" />
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f3ede1] text-xs font-black text-[#352820]">{adminInitials || <UserRound className="h-5 w-5" />}</span>
+            <div className="hidden sm:block">
+              <p className="max-w-40 truncate text-xs font-extrabold text-gray-900">{clientUser?.name || 'Administrador'}</p>
+              <p className="text-[10px] font-semibold text-gray-500">Administrador</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="lg:flex">
+      {mobileMenuOpen && <button type="button" aria-label="Cerrar menú" onClick={() => setMobileMenuOpen(false)} className="fixed inset-0 z-40 bg-black/45 lg:hidden" />}
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-[#352820]/10 bg-white transition-transform duration-200 lg:sticky lg:top-20 lg:z-30 lg:h-[calc(100vh-5rem)] lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-20 items-center justify-between border-b border-gray-200 px-5 lg:hidden">
+          <p className="text-sm font-black tracking-wider text-[#352820]">MENÚ ADMIN</p>
+          <button type="button" onClick={() => setMobileMenuOpen(false)} className="p-2 text-gray-500" aria-label="Cerrar menú"><X className="h-5 w-5" /></button>
+        </div>
+        <nav className="flex-1 space-y-1 px-4 py-7">
+          {adminTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button key={tab.id} type="button" onClick={() => { handleTabChange(tab.id); setMobileMenuOpen(false); }} className={`relative flex w-full items-center gap-3 px-4 py-3 text-sm font-extrabold transition-colors cursor-pointer ${active ? 'bg-[#352820] text-[#f0cf52] shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-[#d3ad2f]' : 'text-gray-700 hover:bg-[#f5f1e8] hover:text-[#352820]'}`}>
+                <Icon className="h-5 w-5" />
+                <span>{tab.label}</span>
+                {tab.badge ? <span className={`ml-auto flex min-w-5 h-5 items-center justify-center px-1 text-[10px] font-black ${active ? 'bg-[#d3ad2f] text-[#352820]' : 'bg-amber-100 text-amber-900'}`}>{tab.badge}</span> : null}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="space-y-2 border-t border-gray-200 p-4">
+          <button type="button" onClick={clientLogout} className="flex w-full items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 cursor-pointer"><LogOut className="h-4 w-4" /> Cerrar sesión</button>
+        </div>
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-4 lg:hidden">
+          <button type="button" onClick={() => setMobileMenuOpen(true)} className="p-2 text-[#352820]" aria-label="Abrir menú"><Menu className="h-6 w-6" /></button>
+          <div>
+            <h1 className="text-xl font-black text-[#352820]">{activeSection.label}</h1>
+            <p className="text-[11px] font-semibold text-gray-500">{sectionDescriptions[activeTab]}</p>
+          </div>
+        </div>
+        <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-8 sm:py-8">
       {feedback && (
         <div className={`fixed bottom-4 left-4 right-4 sm:bottom-6 sm:left-auto sm:right-6 z-50 px-4 py-3 rounded-none shadow-lg border flex items-center gap-2 text-xs font-extrabold animate-bounce ${
           feedback.type === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
@@ -1113,70 +1187,6 @@ export default function Admin() {
           </div>
         </div>
       )}
-
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 border-b border-gray-200 pb-4 gap-4 text-left">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Panel Admin</h1>
-          <p className="text-gray-500 text-xs font-semibold mt-0.5">Gestioná productos, ofertas y ventas de la tienda.</p>
-        </div>
-        <button onClick={clientLogout}
-          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:text-red-600 bg-white border border-gray-300 rounded-none transition-all cursor-pointer hover:border-red-300">
-          <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-8">
-        <button onClick={() => handleTabChange('products')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-none text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
-            activeTab === 'products' ? 'bg-[#352820] text-[#f0dc78]' : 'bg-white border border border-[#352820]/30 text-gray-700 hover:bg-gray-100 font-bold'
-          }`}>
-          <Package className="w-4 h-4" /> Productos
-        </button>
-        <button onClick={() => handleTabChange('offers')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-none text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
-            activeTab === 'offers' ? 'bg-[#352820] text-[#f0dc78]' : 'bg-white border border border-[#352820]/30 text-gray-700 hover:bg-gray-100 font-bold'
-          }`}>
-          <Tag className="w-4 h-4" /> Ofertas
-          {offers.filter(o => o.activa).length > 0 && (
-            <span className="w-5 h-5 rounded-none bg-[#d3ad2f] text-[#352820] text-[10px] font-black flex items-center justify-center">
-              {offers.filter(o => o.activa).length}
-            </span>
-          )}
-          {stockDeactivatedOffers.length > 0 && (
-            <span className="w-5 h-5 rounded-none bg-[#d3ad2f] text-[#352820] text-[10px] font-black flex items-center justify-center">
-              {stockDeactivatedOffers.length}
-            </span>
-          )}
-        </button>
-        <button onClick={() => handleTabChange('sales')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-none text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
-            activeTab === 'sales' ? 'bg-[#352820] text-[#f0dc78]' : 'bg-white border border border-[#352820]/30 text-gray-700 hover:bg-gray-100 font-bold'
-          }`}>
-          <ShoppingCart className="w-4 h-4" /> Ventas
-          {pendingOrdersCount > 0 && (
-            <span className="w-5 h-5 rounded-none bg-[#d3ad2f] text-[#352820] text-[10px] font-black flex items-center justify-center animate-pulse">
-              {pendingOrdersCount}
-            </span>
-          )}
-        </button>
-        <button onClick={() => handleTabChange('messages')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-none text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
-            activeTab === 'messages' ? 'bg-[#352820] text-[#f0dc78]' : 'bg-white border border border-[#352820]/30 text-gray-700 hover:bg-gray-100 font-bold'
-          }`}>
-          <MessageCircle className="w-4 h-4" /> Mensajes
-          {unreadMessagesCount > 0 && (
-            <span className="w-5 h-5 rounded-none bg-[#d3ad2f] text-[#352820] text-[10px] font-black flex items-center justify-center">
-              {unreadMessagesCount}
-            </span>
-          )}
-        </button>
-        <button onClick={() => handleTabChange('config')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-none text-xs uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
-            activeTab === 'config' ? 'bg-[#352820] text-[#f0dc78]' : 'bg-white border border border-[#352820]/30 text-gray-700 hover:bg-gray-100 font-bold'
-          }`}>
-          <FileText className="w-4 h-4" /> Configuración
-        </button>
-      </div>
 
       {activeTab === 'products' && (() => {
         const isDragDisabled = stockFilter !== 'all' || stockSort !== 'none';
@@ -1412,6 +1422,12 @@ export default function Admin() {
       )}
 
       {activeTab === 'sales' && (() => {
+        const today = new Date();
+        const ordersToday = orders.filter((order) => {
+          const orderDate = new Date(order.fecha);
+          return orderDate.toDateString() === today.toDateString();
+        }).length;
+        const preparingOrdersCount = orders.filter((order) => ['pendiente', 'aprobado'].includes(order.estado)).length;
         const filteredOrders = orders.filter(o => {
           if (salesView === 'pending') return !['enviado', 'completado'].includes(o.estado);
           if (salesView === 'shipped') return o.estado === 'enviado';
@@ -1437,7 +1453,35 @@ export default function Admin() {
         }[salesView];
 
         return (
-          <div className="space-y-4 text-left">
+          <div className="space-y-6 text-left">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: 'Pedidos de hoy', value: ordersToday, icon: ShoppingCart, accent: 'border-l-[#d3ad2f]', iconStyle: 'bg-amber-50 text-amber-900' },
+                { label: 'Por revisar', value: pendingReceiptOrders.length, icon: Clock, accent: 'border-l-amber-500', iconStyle: 'bg-amber-50 text-amber-900' },
+                { label: 'En preparación', value: preparingOrdersCount, icon: Package, accent: 'border-l-[#a78665]', iconStyle: 'bg-[#f3ede1] text-[#352820]' },
+                { label: 'Enviados', value: shippedOrdersCount, icon: Truck, accent: 'border-l-emerald-600', iconStyle: 'bg-emerald-50 text-emerald-800' },
+              ].map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <div key={stat.label} className={`flex items-center gap-4 border border-gray-200 border-l-4 bg-white p-5 shadow-xs ${stat.accent}`}>
+                    <span className={`flex h-12 w-12 items-center justify-center ${stat.iconStyle}`}><Icon className="h-6 w-6" /></span>
+                    <div>
+                      <p className="text-xs font-bold text-gray-500">{stat.label}</p>
+                      <p className="mt-1 text-3xl font-black leading-none text-gray-950">{stat.value}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {pendingReceiptOrders.length > 0 && (
+              <button type="button" onClick={() => setSalesView('pending')} className="flex w-full items-center gap-4 border border-amber-300 bg-amber-50 px-5 py-4 text-left hover:bg-amber-100 cursor-pointer">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#d3ad2f] text-lg font-black text-[#352820]">!</span>
+                <span>
+                  <span className="block text-sm font-black text-[#352820]">{pendingReceiptOrders.length} pedido{pendingReceiptOrders.length !== 1 ? 's' : ''} requiere{pendingReceiptOrders.length === 1 ? '' : 'n'} atención</span>
+                  <span className="block text-xs font-semibold text-gray-600">Tienen el pago pendiente de revisión.</span>
+                </span>
+              </button>
+            )}
             {salesView === 'pending' && pendingReceiptOrders.length > 0 && (
               <div className="space-y-3">
                 <div>
@@ -1505,7 +1549,46 @@ export default function Admin() {
               </div>
             )}
 
-            <div className="grid gap-4">
+            {filteredOrders.length > 0 && (
+              <div className="overflow-hidden border border-gray-200 bg-white shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[920px] border-collapse">
+                    <thead className="bg-gray-50 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">
+                      <tr><th className="px-5 py-3">Pedido / fecha</th><th className="px-5 py-3">Cliente</th><th className="px-5 py-3">Productos</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Acción</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {filteredOrders.map((order) => {
+                        const firstItem = order.items?.[0];
+                        const statusLabel = { pendiente: 'En preparación', pendiente_pago: 'Pendiente de pago', esperando_aprobacion: 'Pago a revisar', aprobado: 'Pago aprobado', pago_rechazado: 'Pago rechazado', enviado: 'Enviado', completado: 'Completado' }[order.estado] || order.estado;
+                        const statusClass = order.estado === 'pago_rechazado' ? 'bg-red-100 text-red-800' : ['enviado', 'completado'].includes(order.estado) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900';
+                        const expanded = expandedOrderId === order.id;
+                        return (
+                          <React.Fragment key={order.id}>
+                            <tr className="hover:bg-[#fcfaf5]">
+                              <td className="px-5 py-4"><p className="text-sm font-black text-gray-950">#{order.id}</p><p className="mt-0.5 text-[11px] font-semibold text-gray-500">{new Date(order.fecha).toLocaleString()}</p></td>
+                              <td className="px-5 py-4"><p className="text-sm font-extrabold text-gray-900">{order.cliente_nombre}</p><p className="text-[11px] font-medium text-gray-500">{order.cliente_email}</p></td>
+                              <td className="px-5 py-4"><div className="flex items-center gap-3">{firstItem?.producto_imagen && <img src={firstItem.producto_imagen} alt="" className="h-11 w-11 border border-gray-200 bg-white object-contain p-1" />}<div><p className="max-w-56 truncate text-xs font-bold text-gray-900">{firstItem ? `${firstItem.producto_nombre} × ${firstItem.cantidad}` : 'Sin detalle'}</p>{(order.items?.length || 0) > 1 && <p className="text-[10px] font-semibold text-gray-500">+ {order.items.length - 1} producto{order.items.length > 2 ? 's' : ''}</p>}</div></div></td>
+                              <td className="px-5 py-4 text-sm font-black text-gray-950">{formatPrice(order.total)}</td>
+                              <td className="px-5 py-4"><span className={`inline-flex px-3 py-2 text-xs font-extrabold ${statusClass}`}>{statusLabel}</span></td>
+                              <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} className="bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] hover:bg-[#c39e22] cursor-pointer">{expanded ? 'Cerrar' : 'Ver pedido'}</button></td>
+                            </tr>
+                            {expanded && (
+                              <tr><td colSpan="6" className="bg-[#faf8f3] px-5 py-5"><div className="grid gap-5 lg:grid-cols-3">
+                                <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Entrega</p><div className="space-y-1 text-xs font-semibold text-gray-700">{order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}{order.entrega_telefono && <p><strong>Teléfono:</strong> {order.entrega_telefono}</p>}{order.entrega_direccion && <p><strong>Dirección:</strong> {order.entrega_direccion}</p>}{order.envio_localidad && <p><strong>Destino:</strong> {order.envio_localidad}, {order.envio_provincia}</p>}</div></div>
+                                <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex justify-between gap-3 text-xs"><span className="font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
+                                <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
+                              </div></td></tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="hidden">
               {filteredOrders.map(order => (
                 <div key={order.id} className="bg-white rounded-none border border-gray-200 p-5 flex flex-col md:flex-row gap-6 shadow-xs hover:shadow-sm transition-shadow">
                   
@@ -1648,6 +1731,9 @@ export default function Admin() {
           onSent={() => { refreshMessages(); }}
         />
       )}
+        </main>
+      </div>
+      </div>
     </div>
   );
 }
