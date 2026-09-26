@@ -678,7 +678,7 @@ function StoreConfigForm({ showFeedback }) {
   );
 }
 
-function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
+function ReceiptReviewCard({ order, onFeedback, onUpdated, compact = false }) {
   const [loading, setLoading] = useState(false);
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -751,13 +751,14 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
   };
 
   return (
-    <div className="rounded-none border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+    <div className={`rounded-none border border-amber-200 bg-amber-50/60 p-4 space-y-3 ${compact ? 'mt-2' : ''}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        {!compact && <div>
           <p className="text-sm font-extrabold text-gray-900">Pedido #{order.id}</p>
           <p className="text-xs text-gray-600 mt-1">{order.cliente_nombre} · {order.cliente_email}</p>
           <p className="text-xs font-black text-gray-900 mt-1">{formatPrice(order.total)}</p>
-        </div>
+        </div>}
+        {compact && <p className="text-xs font-extrabold text-amber-950">Comprobante pendiente de revisión</p>}
         <div className="flex flex-wrap gap-2 sm:justify-end">
           <button type="button" onClick={openReceiptPreview} disabled={previewLoading} className="inline-flex items-center gap-1.5 rounded-none border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#f0dc78] hover:bg-[#4b382b] disabled:opacity-50 cursor-pointer">
             <FileText className="w-3.5 h-3.5" /> {previewLoading ? 'Abriendo...' : 'Ver comprobante'}
@@ -776,7 +777,7 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
           <textarea id={`rejection-reason-${order.id}`} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength="500" rows="3" placeholder="Ej.: El comprobante no permite verificar el importe o la operación." className="w-full resize-y border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500" />
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => { setShowRejectForm(false); setRejectionReason(''); }} disabled={loading} className="border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 cursor-pointer">Cancelar</button>
-            <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 bg-red-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-800 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"><XCircle className="w-3.5 h-3.5" /> Confirmar rechazo</button>
+            <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#fff4c7] hover:bg-[#4b382b] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"><XCircle className="w-3.5 h-3.5" /> Confirmar rechazo</button>
           </div>
         </div>
       )}
@@ -805,7 +806,7 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
                 <textarea id={`preview-rejection-reason-${order.id}`} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength="500" rows="2" placeholder="Explicá por qué no se pudo validar el pago." className="w-full resize-y border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500" />
                 <div className="flex justify-end gap-2">
                   <button type="button" onClick={() => { setShowRejectForm(false); setRejectionReason(''); }} disabled={loading} className="border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 cursor-pointer">Cancelar</button>
-                  <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 bg-red-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-800 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"><XCircle className="h-3.5 w-3.5" /> Confirmar rechazo</button>
+                  <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#fff4c7] hover:bg-[#4b382b] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"><XCircle className="h-3.5 w-3.5" /> Confirmar rechazo</button>
                 </div>
               </div>
             )}
@@ -1482,17 +1483,6 @@ export default function Admin() {
                 </span>
               </button>
             )}
-            {salesView === 'pending' && pendingReceiptOrders.length > 0 && (
-              <div className="space-y-3">
-                <div>
-                  <h2 className="font-extrabold text-base text-gray-900">Comprobantes pendientes de revisión</h2>
-                  <p className="text-xs text-gray-500 font-semibold mt-1">Validá el comprobante antes de aprobar el pago.</p>
-                </div>
-                {pendingReceiptOrders.map(order => (
-                  <ReceiptReviewCard key={order.id} order={order} onFeedback={showFeedback} onUpdated={refreshOrders} />
-                ))}
-              </div>
-            )}
             <div className="flex flex-wrap sm:flex-nowrap gap-3 sm:gap-0 items-center justify-between">
               <h2 className="font-extrabold text-base text-gray-900">
                 Historial de Ventas
@@ -1570,10 +1560,11 @@ export default function Admin() {
                               <td className="px-5 py-4"><div className="flex items-center gap-3">{firstItem?.producto_imagen && <img src={firstItem.producto_imagen} alt="" className="h-11 w-11 border border-gray-200 bg-white object-contain p-1" />}<div><p className="max-w-56 truncate text-xs font-bold text-gray-900">{firstItem ? `${firstItem.producto_nombre} × ${firstItem.cantidad}` : 'Sin detalle'}</p>{(order.items?.length || 0) > 1 && <p className="text-[10px] font-semibold text-gray-500">+ {order.items.length - 1} producto{order.items.length > 2 ? 's' : ''}</p>}</div></div></td>
                               <td className="px-5 py-4 text-sm font-black text-gray-950">{formatPrice(order.total)}</td>
                               <td className="px-5 py-4"><span className={`inline-flex px-3 py-2 text-xs font-extrabold ${statusClass}`}>{statusLabel}</span></td>
-                              <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} className="bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] hover:bg-[#c39e22] cursor-pointer">{expanded ? 'Cerrar' : 'Ver pedido'}</button></td>
+                              <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} className="bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] hover:bg-[#c39e22] cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}</button></td>
                             </tr>
                             {expanded && (
                               <tr><td colSpan="6" className="bg-[#faf8f3] px-5 py-5"><div className="grid gap-5 lg:grid-cols-3">
+                                {pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) && <div className="lg:col-span-3"><ReceiptReviewCard order={order} onFeedback={showFeedback} onUpdated={refreshOrders} compact /></div>}
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Entrega</p><div className="space-y-1 text-xs font-semibold text-gray-700">{order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}{order.entrega_telefono && <p><strong>Teléfono:</strong> {order.entrega_telefono}</p>}{order.entrega_direccion && <p><strong>Dirección:</strong> {order.entrega_direccion}</p>}{order.envio_localidad && <p><strong>Destino:</strong> {order.envio_localidad}, {order.envio_provincia}</p>}</div></div>
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex justify-between gap-3 text-xs"><span className="font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
                                 <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
