@@ -5,6 +5,7 @@ import { ClientAuthProvider } from './context/ClientAuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
+import WhatsAppFloat from './components/WhatsAppFloat';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
 import ProductDetail from './pages/ProductDetail';
@@ -35,6 +36,7 @@ export default function App() {
               </Routes>
             </main>
             <Footer />
+            <WhatsAppFloat />
           </div>
         </Router>
       </CartProvider>

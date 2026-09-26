@@ -97,6 +97,9 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
       } else {
         await api.createProduct(payload);
         showFeedback('Producto creado.');
+        setFormData({ ...EMPTY_PRODUCT_FORM });
+        setImageUrls(['']);
+        setErrors({});
       }
       onSaved();
     } catch (err) { showFeedback(err.message, 'error'); }
@@ -588,6 +591,93 @@ function BankConfigForm({ showFeedback }) {
   );
 }
 
+function StoreConfigForm({ showFeedback }) {
+  const [form, setForm] = useState({
+    name: 'NigDiz',
+    whatsapp: '',
+    contactEmail: '',
+    instagramUrl: '',
+    address: '',
+    businessHours: '',
+    footerText: ''
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.getStoreConfig()
+      .then((config) => setForm((current) => ({ ...current, ...config })))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    try {
+      const saved = await api.updateStoreConfig(form);
+      setForm(saved);
+      showFeedback('Datos generales guardados.');
+    } catch (error) {
+      showFeedback(error.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Cargando datos generales...</p>;
+
+  const fields = [
+    ['name', 'Nombre visible', 'NigDiz', 80],
+    ['whatsapp', 'WhatsApp', 'Ej: +54 9 3446 000000', 40],
+    ['contactEmail', 'Email de contacto', 'hola@nigdiz.com', 255],
+    ['instagramUrl', 'Instagram', 'https://instagram.com/nigdiz', 240],
+    ['address', 'Direccion / localidad', 'Gualeguaychu, Entre Rios', 180],
+    ['businessHours', 'Horarios de atencion', 'Lunes a viernes de 9 a 18 hs', 180],
+  ];
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4">
+      <p className="text-xs text-gray-500 font-semibold">Estos datos son publicos y sirven como base para footer, contacto, emails y textos comerciales.</p>
+      {error && <p className="text-xs font-bold text-red-700">{error}</p>}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {fields.map(([name, label, placeholder, maxLength]) => (
+          <div key={name}>
+            <label htmlFor={`store-${name}`} className="label-xs">{label}</label>
+            <input
+              id={`store-${name}`}
+              name={name}
+              value={form[name] || ''}
+              onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}
+              maxLength={maxLength}
+              placeholder={placeholder}
+              className="w-full px-3 py-2 rounded-none border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#352820] text-xs font-semibold text-gray-900"
+            />
+          </div>
+        ))}
+      </div>
+      <div>
+        <label htmlFor="store-footerText" className="label-xs">Texto corto de footer</label>
+        <textarea
+          id="store-footerText"
+          name="footerText"
+          value={form.footerText || ''}
+          onChange={(event) => setForm((current) => ({ ...current, footerText: event.target.value }))}
+          maxLength={240}
+          rows="3"
+          placeholder="Texto breve de presentacion de la tienda"
+          className="w-full px-3 py-2 rounded-none border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#352820] text-xs font-semibold text-gray-900"
+        />
+      </div>
+      <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-none bg-[#352820] px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-[#f0dc78] hover:bg-[#4b382b] disabled:opacity-50 cursor-pointer">
+        {saving ? 'Guardando...' : 'Guardar datos generales'}
+      </button>
+    </form>
+  );
+}
+
 function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
   const [loading, setLoading] = useState(false);
 
@@ -664,6 +754,22 @@ export default function Admin() {
 
   const [feedback, setFeedback] = useState(null);
   const [stockWarning, setStockWarning] = useState(null);
+
+  useEffect(() => {
+    if (!editProduct) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setEditProduct(null);
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [editProduct]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -876,8 +982,14 @@ export default function Admin() {
       )}
 
       {editProduct && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-none border border-[#352820] p-6 shadow-2xl max-w-lg w-full max-h-[90dvh] overflow-y-auto relative text-left">
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[60] p-3 sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setEditProduct(null);
+          }}
+          role="presentation"
+        >
+          <div className="bg-white rounded-none border border-[#352820] p-5 sm:p-8 shadow-2xl max-w-2xl w-full max-h-[94dvh] overflow-y-auto overscroll-contain relative text-left">
             <button
               type="button"
               onClick={() => setEditProduct(null)}
@@ -1319,6 +1431,14 @@ export default function Admin() {
                     <div>
                       <p className="text-sm font-extrabold text-gray-900">{order.cliente_nombre}</p>
                       <p className="text-xs text-gray-500 font-medium">{order.cliente_email}</p>
+                      {(order.entrega_direccion || order.envio_localidad) && (
+                        <div className="mt-2 space-y-0.5 text-[11px] text-gray-600 font-semibold">
+                          {order.entrega_nombre && <p><span className="font-black text-[#352820]">Recibe:</span> {order.entrega_nombre}</p>}
+                          {order.entrega_telefono && <p><span className="font-black text-[#352820]">Tel:</span> {order.entrega_telefono}</p>}
+                          {order.entrega_direccion && <p><span className="font-black text-[#352820]">Direccion:</span> {order.entrega_direccion}</p>}
+                          {order.envio_localidad && <p><span className="font-black text-[#352820]">Envio:</span> {order.envio_localidad}, {order.envio_provincia} {order.envio_cp ? `(CP ${order.envio_cp})` : ''} - {Number(order.envio_costo || 0) === 0 ? 'Gratis' : formatPrice(Number(order.envio_costo))}</p>}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1343,6 +1463,12 @@ export default function Admin() {
                     <div className="text-right">
                       <p className="text-[10px] uppercase font-black text-gray-400">Total</p>
                       <p className="font-black text-xl text-gray-900">{formatPrice(order.total)}</p>
+                      {order.metodo_pago === 'mercadopago' && (
+                        <div className="mt-1 text-[10px] text-gray-500 font-bold">
+                          <p>MP: {order.mp_payment_status || 'pendiente'}</p>
+                          {order.mp_payment_id && <p>ID {order.mp_payment_id}</p>}
+                        </div>
+                      )}
                     </div>
 
                     <div className="w-full">
@@ -1411,9 +1537,15 @@ export default function Admin() {
       )}
 
       {activeTab === 'config' && (
-        <div className="bg-white border border-gray-200 rounded-none p-6 shadow-xs text-left">
-          <h2 className="font-extrabold text-base text-gray-900 mb-1">Datos bancarios</h2>
-          <BankConfigForm showFeedback={showFeedback} />
+        <div className="space-y-4 text-left">
+          <div className="bg-white border border-gray-200 rounded-none p-6 shadow-xs">
+            <h2 className="font-extrabold text-base text-gray-900 mb-1">Datos generales</h2>
+            <StoreConfigForm showFeedback={showFeedback} />
+          </div>
+          <div className="bg-white border border-gray-200 rounded-none p-6 shadow-xs">
+            <h2 className="font-extrabold text-base text-gray-900 mb-1">Datos bancarios</h2>
+            <BankConfigForm showFeedback={showFeedback} />
+          </div>
         </div>
       )}
 

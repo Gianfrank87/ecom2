@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ShoppingBag, ShoppingCart, Menu, X, ShieldCheck, User, Package, LogOut, Search, MessageCircle } from 'lucide-react';
+import { ShoppingBag, ShoppingCart, Menu, X, ShieldCheck, User, Package, LogOut, Search, MessageCircle, Settings, Tags } from 'lucide-react';
 
 const BRAND_LOGO = 'https://res.cloudinary.com/dl3t6vykm/image/upload/v1788907250/copy_of_0eab9e86-bf10-4de7-8c39-d84f17317403.png';
 import { useCart } from '../context/CartContext';
@@ -372,6 +372,27 @@ export default function Navbar() {
                     {isAdmin ? (
                       <>
                         <Link
+                          to="/admin?tab=products"
+                          onClick={handleLinkClick}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
+                        >
+                          <ShieldCheck className="w-4 h-4" /> Panel admin
+                        </Link>
+                        <Link
+                          to="/admin?tab=products"
+                          onClick={handleLinkClick}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
+                        >
+                          <Package className="w-4 h-4" /> Productos
+                        </Link>
+                        <Link
+                          to="/admin?tab=offers"
+                          onClick={handleLinkClick}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
+                        >
+                          <Tags className="w-4 h-4" /> Ofertas
+                        </Link>
+                        <Link
                           to="/admin?tab=sales&view=pending"
                           onClick={handleLinkClick}
                           className="flex items-center justify-between gap-3 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
@@ -401,6 +422,20 @@ export default function Navbar() {
                               {adminNotifications.messages}
                             </span>
                           )}
+                        </Link>
+                        <Link
+                          to="/admin?tab=config"
+                          onClick={handleLinkClick}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors border-t border-gray-100 mt-1 pt-3"
+                        >
+                          <Settings className="w-4 h-4" /> Configuracion
+                        </Link>
+                        <Link
+                          to="/admin?tab=config"
+                          onClick={handleLinkClick}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-amber-50 hover:text-[#352820] transition-colors"
+                        >
+                          <User className="w-4 h-4" /> Cuenta admin
                         </Link>
                       </>
                     ) : (
@@ -541,6 +576,27 @@ export default function Navbar() {
               {isAdmin ? (
                 <>
                   <Link
+                    to="/admin?tab=products"
+                    onClick={handleLinkClick}
+                    className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#d3ad2f] py-2 border-b border-gray-100"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> Panel admin
+                  </Link>
+                  <Link
+                    to="/admin?tab=products"
+                    onClick={handleLinkClick}
+                    className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#d3ad2f] py-2 border-b border-gray-100"
+                  >
+                    <Package className="w-4 h-4" /> Productos
+                  </Link>
+                  <Link
+                    to="/admin?tab=offers"
+                    onClick={handleLinkClick}
+                    className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#d3ad2f] py-2 border-b border-gray-100"
+                  >
+                    <Tags className="w-4 h-4" /> Ofertas
+                  </Link>
+                  <Link
                     to="/admin?tab=sales&view=pending"
                     onClick={handleLinkClick}
                     className="flex items-center justify-between gap-2 text-sm font-bold text-gray-800 hover:text-[#d3ad2f] py-2 border-b border-gray-100"
@@ -569,7 +625,21 @@ export default function Navbar() {
                       <span className="min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
                         {adminNotifications.messages}
                       </span>
-                    )}
+                      )}
+                    </Link>
+                  <Link
+                    to="/admin?tab=config"
+                    onClick={handleLinkClick}
+                    className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#d3ad2f] py-2 border-b border-gray-100"
+                  >
+                    <Settings className="w-4 h-4" /> Configuracion
+                  </Link>
+                  <Link
+                    to="/admin?tab=config"
+                    onClick={handleLinkClick}
+                    className="flex items-center gap-2 text-sm font-bold text-gray-800 hover:text-[#d3ad2f] py-2 border-b border-gray-100"
+                  >
+                    <User className="w-4 h-4" /> Cuenta admin
                   </Link>
                 </>
               ) : (

@@ -32,6 +32,7 @@ export default function Cart() {
   const [formErrors, setFormErrors] = useState({});
   const [checkoutStep, setCheckoutStep] = useState('cart'); // cart, checkout, success
   const [simulatedOrderNumber, setSimulatedOrderNumber] = useState('');
+  const [confirmedOrderTotal, setConfirmedOrderTotal] = useState(null);
 
   // Shipping Simulation State
   const [shippingQuote, setShippingQuote] = useState(null);
@@ -148,6 +149,9 @@ export default function Cart() {
     if (!formData.address || !formData.address.trim() || formData.address.trim().length < 3) {
       errors.address = 'La dirección de entrega es obligatoria. Por favor ingresá calle y altura.';
     }
+    if (!shippingQuote) {
+      errors.shipping = 'Calcula y selecciona una localidad de envio antes de finalizar la compra.';
+    }
     return errors;
   };
 
@@ -193,6 +197,7 @@ export default function Cart() {
       }
 
       setSimulatedOrderNumber(res.orderId);
+      setConfirmedOrderTotal(res.total ?? displayedTotal);
       setCheckoutStep('success');
 
       setTimeout(() => {
@@ -244,8 +249,12 @@ export default function Cart() {
             <div className="space-y-1">
               <p className="text-xs text-gray-600"><strong>Cliente:</strong> {formData.name}</p>
               <p className="text-xs text-gray-600"><strong>Dirección:</strong> {formData.address}</p>
+              {shippingQuote && (
+                <p className="text-xs text-gray-600"><strong>Envio:</strong> {shippingQuote.destination.localidad}, {shippingQuote.destination.provincia} ({shippingQuote.price === 0 ? 'Gratis' : formatPrice(shippingQuote.price)})</p>
+              )}
               <p className="text-xs text-gray-600"><strong>Teléfono:</strong> {formData.phone}</p>
               <p className="text-xs text-gray-600"><strong>Email:</strong> {formData.email}</p>
+              <p className="text-xs text-gray-600"><strong>Total confirmado:</strong> {formatPrice(confirmedOrderTotal ?? displayedTotal)}</p>
             </div>
             {formData.notes && (
               <p className="text-[11px] text-gray-500 italic pt-1 border-t border-gray-150">
@@ -595,6 +604,10 @@ export default function Cart() {
                     setApiError(`Los siguientes productos no tienen stock disponible: ${outOfStock.map(item => item.name).join(', ')}`);
                     // Scroll to top to show the error
                     window.scrollTo({ top: 0, behavior: 'smooth' });
+                  } else if (!shippingQuote) {
+                    setApiError('Calcula y selecciona una localidad de envio antes de continuar.');
+                    setIsShippingPanelOpen(true);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else {
                     setApiError('');
                     setCheckoutStep('checkout');
@@ -614,6 +627,12 @@ export default function Cart() {
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-200">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span className="font-bold">{apiError}</span>
+                </div>
+              )}
+              {formErrors.shipping && (
+                <div className="bg-amber-50 text-amber-900 p-3 rounded-lg text-xs flex items-center gap-2 border border-amber-200">
+                  <Truck className="w-4 h-4 shrink-0" />
+                  <span className="font-bold">{formErrors.shipping}</span>
                 </div>
               )}
 

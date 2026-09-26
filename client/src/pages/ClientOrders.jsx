@@ -272,6 +272,16 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
       {/* Expandable items */}
       {expanded && (
         <div className="border-t border-gray-200 bg-gray-50 px-4 py-4 space-y-3">
+          {(order.entrega_direccion || order.envio_localidad) && (
+            <div className="bg-white border border-gray-200 p-3 text-xs text-gray-700 space-y-1">
+              <p className="font-extrabold text-[#352820] uppercase tracking-wider">Entrega</p>
+              {order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}
+              {order.entrega_direccion && <p><strong>Direccion:</strong> {order.entrega_direccion}</p>}
+              {order.entrega_telefono && <p><strong>Telefono:</strong> {order.entrega_telefono}</p>}
+              {order.envio_localidad && <p><strong>Envio:</strong> {order.envio_localidad}, {order.envio_provincia} {order.envio_cp ? `(CP ${order.envio_cp})` : ''} - {Number(order.envio_costo || 0) === 0 ? 'Gratis' : formatPrice(Number(order.envio_costo))}</p>}
+              {order.entrega_notas && <p><strong>Notas:</strong> {order.entrega_notas}</p>}
+            </div>
+          )}
           <p className="text-xs font-extrabold text-[#352820] uppercase tracking-wider mb-2">Productos del pedido</p>
           {order.items.map((item, idx) => (
             <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-3">

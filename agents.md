@@ -1,257 +1,309 @@
-# AGENTS.MD - Estado del Proyecto NigDiz
+# AGENTS.md - Estado actual del proyecto NigDiz
 
-## 📌 Resumen General
-**NigDiz** es una aplicación web de e-commerce para mascotas desarrollada con React (Vite) en el frontend y Node.js + Express + PostgreSQL en el backend.
+Ultima actualizacion: 2026-09-26.
 
-> Estado actualizado: 2026-09-06. El proyecto conserva rutas, textos históricos y nombres internos de Huellitas en algunas áreas del código, pero la marca visible actual es NigDiz.
+NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + PostgreSQL. La marca visible es NigDiz, aunque todavia quedan nombres historicos internos como `huellitas_*`, `huellitas-server` y algunos textos heredados en codigo o localStorage.
 
----
+Este archivo resume el estado real del repo y debe mantenerse como guia operativa para futuras sesiones de trabajo.
 
-## 🛠️ Stack Tecnológico
+## Stack
 
-- **Frontend**:
-  - React 19 + Vite
-  - Tailwind CSS v4 (`@tailwindcss/vite` nativo)
-  - React Router DOM v7
-  - Lucide React (Iconos)
-  - `ClientAuthContext` (Sesión JWT única persistida en `localStorage`, con rol)
-  - `CartContext` (Carrito persistido en `localStorage`)
-- **Backend**:
-  - Node.js (ES Modules `"type": "module"`)
-  - Express.js (Puerto `5000`)
-  - CORS habilitado
-  - PostgreSQL mediante `pg` y `DATABASE_URL`
-  - `mercadopago` SDK v2 (generación de preferencias de pago)
-- **Servidores Dev**:
-  - Frontend: `http://localhost:5173/`
-  - Backend: `http://localhost:5000/`
+- Frontend:
+  - React 19, Vite 8, React Router DOM 7.
+  - Tailwind CSS v4 mediante `@tailwindcss/vite`.
+  - Lucide React para iconos.
+  - `ClientAuthContext` para sesion JWT unica con rol.
+  - `CartContext` para carrito persistido, toast y drawer lateral.
+- Backend:
+  - Node.js con ES Modules.
+  - Express 5.
+  - PostgreSQL mediante `pg` y `DATABASE_URL`.
+  - JWT con `jsonwebtoken`.
+  - Password hashing con `bcryptjs`.
+  - Rate limiting con `express-rate-limit`.
+  - Upload privado de comprobantes con `multer`.
+  - Mercado Pago SDK v3 para preferencias, pagos y webhook.
+  - Email de bienvenida con Resend o SMTP via `nodemailer`.
+- Desarrollo local:
+  - Frontend: `http://localhost:5173`.
+  - Backend: `http://localhost:5000`.
+  - PostgreSQL local aislado: `127.0.0.1:55432/nigdiz_local`.
 
----
+## Comandos
 
-## 🗄️ Estructura de la Base de Datos (PostgreSQL)
+Desde la raiz del proyecto:
 
-1. **`categorias`**: `id` (PK AUTO), `nombre` (UNIQUE)
-2. **`productos`**: `id` (PK AUTO), `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `activo`, `destacado`, `orden` (INTEGER)
-3. **`clientes`**: `id` (PK AUTO), `nombre`, `email` (UNIQUE), `password_hash`, `rol` (`cliente` | `admin`), `fecha_registro`
-4. **`pedidos`**: `id` (PK AUTO), `cliente_id`, `fecha`, `total`, `estado` (`pendiente` | `esperando_aprobacion` | `pago_rechazado` | `pendiente_pago` | `aprobado` | `enviado` | `completado`), `metodo_pago` (`transferencia` | `efectivo` | `mercadopago`), `recargo_aplicado`, `comprobante_url` (privada)
-5. **`pedido_items`**: `id` (PK AUTO), `pedido_id`, `producto_id`, `oferta_id` (nullable), `cantidad`, `precio_unitario`
-6. **`mensajes`**: `id` (PK AUTO), `pedido_id`, `remitente` (`cliente` | `admin`), `contenido`, `fecha`, `leido`, `hilo_id`, `tipo` (`mensaje` | `sistema`), `cerrado`
-7. **`ofertas`**: `id` (PK AUTO), `nombre`, `producto_ids` (JSON Array), `descuento_o_precio_paquete`, `tipo_descuento` (`'precio_paquete'` | `'porcentaje'`), `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`
-8. **`configuraciones`**: `clave` (PK), `valor`; contiene `banco_alias`, `banco_cbu` y `banco_titular`
+- `npm run dev:local`: flujo recomendado para pruebas completas. Prepara/inicia PostgreSQL local aislado, backend y Vite.
+- `npm run local:setup`: prepara la base local sin levantar la web.
+- `npm run dev:server:local`: levanta solo el backend contra la base local.
+- `npm run local:stop`: detiene PostgreSQL local y conserva datos.
+- `npm run dev`: levanta solo Vite desde `client`.
+- `npm run dev:server`: levanta `server/index.js` usando `.env` de la raiz.
+- `npm run build`: compila el frontend.
+- `npm run lint`: ejecuta `oxlint client/src`.
 
----
+Detalles del entorno local estan en `ENTORNO-LOCAL.md`. Las credenciales de prueba generadas viven en `.local/ACCESOS.md`; esa carpeta no se sube a Git.
 
-## 🔑 Credenciales y Autenticación
+## Estructura principal
 
-- **Login único**: clientes y administradores ingresan desde `/login` mediante `POST /api/clients/login`.
-- **Superusuario de pruebas**: cuenta administrativa interna con `rol = admin`; sus credenciales no se documentan ni se guardan en el repositorio.
-- **Usuarios nuevos**: se crean con `rol = cliente` por defecto.
-- **Sesión frontend**: JWT persistido en `huellitas_client_token`; el campo `user.role` determina si se muestra el acceso al panel.
-- **Autorización admin**: los endpoints administrativos validan el JWT y requieren `role = admin`.
+- `client/`: aplicacion React.
+- `server/`: API Express, migraciones y servicios.
+- `server/local/schema.sql`: esquema usado por el entorno local aislado.
+- `scripts/local-environment.mjs`: orquestador de PostgreSQL local, backend y Vite.
+- `.local/`: datos y secretos locales ignorados por Git.
+- `dist/`: build generado.
 
----
+## Base de datos
 
-## 🌐 Endpoints de la API Backend (`http://localhost:5000/api`)
+Tablas principales:
 
-### Autenticación Clientes
-- `POST /api/clients/register` -> Body: `{ name, email, password }` -> Resp: `{ token, user, message }`, crea rol `cliente`
-- `POST /api/clients/login` -> Body: `{ email, password }` (también acepta usuario admin) -> Resp: `{ token, user, message }` con `user.role`
-- `GET /api/clients/verify` -> **Protegido Cliente** -> Resp: `{ valid: true, user }`
-- `GET /api/clients/orders` -> **Protegido Cliente** -> Retorna pedidos del cliente autenticado con sus items
-- `GET /api/orders/:id/messages` -> **Protegido** -> Retorna el hilo si el usuario es dueño del pedido o admin
-- `POST /api/orders/:id/messages` -> **Protegido** -> Body: `{ contenido }`; registra remitente automáticamente como `cliente` o `admin`
-- `PATCH /api/orders/:id/messages/read` -> **Protegido** -> Body opcional: `{ remitente: 'cliente' | 'admin' }`; marca mensajes del hilo como leídos
-- `PATCH /api/orders/:id/messages/close` -> **Protegido Admin** -> Cierra el hilo activo e inserta un mensaje de sistema; el cliente puede abrir un hilo nuevo
-- `PATCH /api/orders/:id/messages/reopen` -> **Protegido Cliente** -> Crea un nuevo hilo abierto e inserta un mensaje de sistema con el nombre del cliente
+- `categorias`: `id`, `nombre`.
+- `clientes`: `id`, `nombre`, `email`, `password_hash`, `rol`, `fecha_registro`.
+- `productos`: `id`, `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `imagenes`, `activo`, `destacado`, `orden`.
+- `pedidos`: `id`, `cliente_id`, `fecha`, `total`, `estado`, `metodo_pago`, `recargo_aplicado`, datos de entrega/envio, metadata Mercado Pago (`mp_payment_id`, `mp_payment_status`, `mp_payment_status_detail`, `mp_merchant_order_id`, `mp_preference_id`, `mp_approved_at`, `mp_last_webhook_at`), `comprobante_url`.
+- `pedido_items`: `id`, `pedido_id`, `producto_id`, `oferta_id`, `cantidad`, `precio_unitario`.
+- `ofertas`: `id`, `nombre`, `producto_ids`, `descuento_o_precio_paquete`, `tipo_descuento`, `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`.
+- `mensajes`: `id`, `pedido_id`, `remitente`, `contenido`, `fecha`, `leido`, `hilo_id`, `tipo`, `cerrado`.
+- `configuraciones`: `clave`, `valor`.
 
-### Productos
-- `GET /api/products` -> Público (retorna productos activos ordenados por `orden ASC`)
-- `GET /api/products/:id` -> Público
-- `POST /api/products` -> **Protegido Admin**
-- `PUT /api/products/:id` -> **Protegido Admin**
-- `PATCH /api/products/reorder` -> **Protegido Admin** (recibe `{ ids: [...] }` para reordenar la posición `orden` de los productos)
-- `PATCH /api/products/:id/stock` -> **Protegido Admin** (recibe `{ delta: 1 | -1 }`, ajusta una unidad y desactiva ofertas si el stock llega a cero)
-- `DELETE /api/products/:id` -> **Protegido Admin**
+`configuraciones` guarda datos bancarios (`banco_alias`, `banco_cbu`, `banco_titular`), datos generales de tienda (`tienda_nombre`, `tienda_whatsapp`, `tienda_email_contacto`, `tienda_instagram_url`, `tienda_direccion`, `tienda_horarios`, `tienda_footer_texto`) y bloques de contenido editables como `content_home_hero`.
 
-### Categorías
-- `GET /api/categories` -> Público
+`server/index.js` ejecuta una sincronizacion chica al arrancar: agrega `productos.imagenes` si falta y ajusta los estados permitidos de `pedidos`. Las migraciones historicas siguen existiendo y se ejecutan manualmente cuando corresponda:
 
-### Ofertas
-- `GET /api/offers/active` -> Público (retorna ofertas activas ordenadas por prioridad `DESC` con sus productos anidados y `vendidos`; excluye ofertas con productos eliminados o sin stock)
-- `GET /api/offers` -> **Protegido Admin** (incluye campo `vendidos` por oferta)
-- `POST /api/offers` -> **Protegido Admin**
-- `PUT /api/offers/:id` -> **Protegido Admin** (la UI muestra confirmación explícita si la oferta incluye productos sin stock)
-- `PATCH /api/offers/:id/toggle` -> **Protegido Admin** (activa/desactiva)
-- `DELETE /api/offers/:id` -> **Protegido Admin**
+- `server/migrate-payment-method.js`
+- `server/migrate-bank-config.js`
+- `server/migrate-offers-columns.js`
+- `server/migrate-categories.js`
 
-### Pedidos
-- `POST /api/orders` -> **Protegido Cliente** -> Recibe `metodo_pago`; recalcula el total base desde la base de datos y registra `recargo_aplicado`. Para transferencia/efectivo descuenta stock dentro de una única transacción; para Mercado Pago valida stock pero lo descuenta sólo al aprobarse el pago mediante webhook. Genera la Preferencia con clave de idempotencia y devuelve `{ orderId, init_point, message }`.
-- `POST /api/orders/:id/comprobante` -> **Protegido Cliente propietario** -> Recibe multipart con campo `comprobante`; acepta JPEG/PNG/PDF, máximo 5 MB, valida firma binaria y deja el pedido en `esperando_aprobacion`.
-- `GET /api/orders/:id/comprobante` -> **Protegido Cliente propietario o Admin** -> Sirve el archivo privado sólo después de validar autorización.
-- `PATCH /api/admin/orders/:id/approval` -> **Protegido Admin** -> Body `{ decision: 'approved' | 'rejected' }`; deja el pedido en `pendiente` o `pago_rechazado`.
-- `GET /api/orders` -> **Protegido Admin** -> Lista todos los pedidos con datos de cliente e items
-- `PATCH /api/orders/:id/status` -> **Protegido Admin** -> Cambia estado del pedido
-- `GET /api/messages` -> **Protegido Admin** -> Lista hilos agrupados por pedido con `no_leidos` para la bandeja del panel
+No ejecutar migraciones ni scripts de datos contra produccion sin confirmar el destino. `migrar-datos.js` y scripts de limpieza pueden borrar datos.
 
-### Configuración bancaria
-- `GET /api/config/banco` -> Público -> Devuelve alias, CBU y titular configurados.
-- `PUT /api/admin/config/banco` -> **Protegido Admin** -> Body `{ alias, cbu, titular }`; actualiza la configuración bancaria en una única transacción.
+## Autenticacion y roles
 
----
+- Login unico en `/login`, usando `POST /api/clients/login`.
+- Los clientes nuevos se registran con rol `cliente`.
+- El rol `admin` se lee del JWT y protege endpoints administrativos.
+- El token se guarda en `localStorage` con la clave historica `huellitas_client_token`.
+- El carrito se guarda en `localStorage` con la clave historica `huellitas_cart`.
+- No documentar credenciales reales ni superusuarios en el repo.
 
-## 🎨 Sistema de Diseño y Dirección Visual (NigDiz)
+## API backend
 
-- **Tipografía Principal**: `Plus Jakarta Sans` (Google Fonts, pesos 300 a 800) en sustitución de Inter/system-ui.
-- **Paleta de Colores Corporativa**:
-  - **Dorado principal para CTA y acentos**: `#d3ad2f` (hover claro `#f0dc78`, activo `#b89420`)
-  - **Marrón oscuro para navegación y contraste**: `#352820`
-  - **Marrón medio/claro para jerarquía**: `#4b382b`, `#a78665`
-  - **Celeste para fondos y superficies**: `#6fb4d0` y la escala `primary-50..400`
-  - **Turquesa para estados positivos**: `#16b7c7` y la escala `sage-50..900`
-  - **Rojo de marca eliminado**: no usar rojo en CTA, enlaces, hover, focus, bordes ni gradientes. Los estados semánticos heredados `red-*` se remapean globalmente a dorados/marrones.
-- **Estilo Visual**:
-  - Estructuras limpias y estructuradas con bordes de 1px (`border-gray-200`) y acentos de alto contraste en estado hover.
-  - Eliminación total de esquinas curvas exageraas tipo "SaaS genérico" y gradientes violetas.
-  - Fotografía real de producto en marcos blancos cuadrados con padding (`object-contain`).
+Base local: `http://localhost:5000/api`.
 
----
+Autenticacion:
 
-## 🎨 Componentes y Páginas del Frontend (`src/`)
+- `POST /api/clients/register`: crea cliente, hashea password y dispara email de bienvenida en segundo plano.
+- `POST /api/clients/login`: login de cliente o admin.
+- `GET /api/clients/verify`: valida token.
+- `GET /api/clients/orders`: pedidos del cliente autenticado.
 
-- **`src/services/api.js`**: Cliente `fetch` centralizado con inyección automática de headers de auth.
-- **`src/context/ClientAuthContext.jsx`**: Manejo global de la sesión única (JWT), usuario y `isAdmin`.
-- **`src/context/CartContext.jsx`**: Carrito de compras, cantidades y tostadas de notificación.
-- **`src/components/`**:
-  - `Navbar.jsx`: Barra superior de beneficios, buscador centralizado, carrito con badge flotante y logo Cloudinary de NigDiz acompañado por texto de marca.
-  - `Hero.jsx`: Banner promocional con imagen de producto, badge y botón en la paleta dorado/marrón; no debe reintroducir rojo en hover ni gradientes.
-  - `FeaturedCategories.jsx`: Grilla de tarjetas blancas circulares limpias con iconos y contador.
-  - `ProductCard.jsx`: Card retail con acento superior dorado/celeste, fotografía contenida, badges de variantes/peso (`1.5kg`, `3kg`, `7.5kg`), precio destacado y botón CTA dorado.
-  - `OfertaCard.jsx`: Card de pack en oferta con badges de % OFF, ahorro destacado y botón de compra rápido.
-  - `Footer.jsx`: Pie de página profesional con medios de pago aceptados (VISA, Mastercard, Mercado Pago, Transferencia), datos de contacto y derechos reservados.
-- **`src/pages/`**:
-  - `Home.jsx`: Muestra Barra de Beneficios, Hero Promocional, Categorías, Grilla de Marcas Destacadas ("Seleccioná tu marca"), Sección de Ofertas y Productos Destacados en orden de prioridad.
-  - `Catalog.jsx`: Banner de Ofertas, filtro de búsqueda integrado con la URL (`?search=...`), filtros por categoría estilo botones pills y selector de ordenamiento por defecto en base al campo `orden`.
-  - `ProductDetail.jsx`: Vista detallada de producto con selector de cantidad y stock.
-  - `Cart.jsx`: Tabla de items del carrito, modificación de cantidades, subtotal/total y checkout real integrado con la API de pedidos.
-  - `ClientLogin.jsx`: Formulario de inicio de sesión para clientes.
-  - `ClientRegister.jsx`: Formulario de registro con confirmación de contraseña.
-  - `ClientOrders.jsx`: Vista `/mis-pedidos` con historial de pedidos del cliente y botón para abrir un hilo de mensajes por pedido.
-  - `Admin.jsx`: Panel Admin con tabs de Productos (Drag & drop `@dnd-kit/core`), Ofertas, Ventas y Mensajes agrupados por pedido.
-  - `Navbar.jsx`: El menú de perfil admin ofrece accesos a Pendientes, Ventas y Mensajes con badge de no leídos; los clientes conservan Mis Pedidos.
+Productos y categorias:
 
----
+- `GET /api/products`: publico, productos activos ordenados por `orden`.
+- `GET /api/products/:id`: publico.
+- `POST /api/products`: admin.
+- `PUT /api/products/:id`: admin.
+- `PATCH /api/products/reorder`: admin, reordena productos.
+- `PATCH /api/products/:id/stock`: admin, suma/resta una unidad y desactiva ofertas si corresponde.
+- `DELETE /api/products/:id`: admin.
+- `GET /api/categories`: publico.
 
-## 🚀 Próximos Pasos Pendientes
-1. ~~**Autenticación y Registro de Clientes**: Implementar registro, login, contraseñas hasheadas y perfil para los usuarios compradores (`clientes`).~~ (Completado)
-2. ~~**Sistema de Pedidos / Compras Real**: Conectar el checkout del carrito a las tablas `pedidos` y `pedido_items` en la base de datos.~~ (Completado)
-3. ~~**Panel de Ventas en Admin**: Crear pestaña en el panel admin para ver los pedidos realizados por los clientes y cambiar su estado (`pendiente`, `enviado`, `completado`).~~ (Completado)
-4. ~~**BUG CRÍTICO - Ofertas en el carrito**: Solucionado el precio de ofertas en carrito agrupando productos bajo un solo item `isOffer` y guardando el historial con `oferta_id` en la BD.~~ (Completado)
-5. ~~**Registro de clientes**: Añadida validación de confirmar contraseña y redirección al login (sin auto-login). (Email de confirmación pendiente)~~ (Completado)
-6. ~~**Panel Admin - Filtro de stock**: Añadidos selectores para filtrar por nivel de stock y ordenar de forma ascendente/descendente.~~ (Completado)
-7. ~~**Panel Admin - Notificaciones de ventas**: Mostrado badge de notificaciones de nuevos pedidos no leídos en el tab de Ventas mediante un timestamp en localStorage.~~ (Completado)
-8. ~~**Panel Admin - Ofertas vendidas**: Añadido contador de ofertas vendidas consultando a la base de datos la cantidad de compras realizadas de esa oferta.~~ (Completado)
-9. ~~**Perfil de cliente / Mis Pedidos**: Menú desplegable en el Navbar (desktop + mobile) con "Mis Pedidos" y "Cerrar Sesión". Vista `/mis-pedidos` con historial de pedidos, estado, productos e imágenes.~~ (Completado)
-10. ~~**Fix badge de notificaciones de Ventas**: Badge ahora muestra cantidad real de pedidos en estado `pendiente` (no por timestamp). Tab Ventas tiene subvistas "No resueltos" (pendientes, por defecto) y "Resueltos" (enviados/completados). Se eliminó la lógica de `localStorage`/timestamp.~~ (Completado)
-11. ~~**Ordenamiento manual de productos (Drag & Drop en Admin y Web Pública)**: Campo `orden` en tabla productos, endpoint `PATCH /api/products/reorder`, drag & drop en Admin con `@dnd-kit/core`, y catálogo/home mostrando productos por defecto en base a `orden` (ascendente).~~ (Completado)
-12. ~~**Rediseño de Frontend estilo Pet Shop Real**: Integración de referencias de e-commerce reales de Argentina (MiVetShop, MisPichos, Timberline). Barra de beneficios superior, buscador centralizado, Hero promocional con cupones destacados, grilla de marcas oficiales, tarjetas de productos con variantes y botones CTA en la paleta NigDiz dorado/marrón/celeste/turquesa, y tipografía `Plus Jakarta Sans` en toda la web.~~ (Completado)
+Ofertas:
 
-13. ~~**BUG CRÍTICO - Contraste de botones**: Auditoría completa de todos los botones e interacciones. La paleta visible actual usa dorados y marrones con contraste alto; los selectores globales de `index.css` remapean utilidades heredadas y sus estados hover/focus para impedir que reaparezca el rojo.~~ (Completado)
+- `GET /api/offers/active`: publico, solo ofertas activas, completas y con stock.
+- `GET /api/offers`: admin, incluye ventas por oferta.
+- `POST /api/offers`: admin.
+- `PUT /api/offers/:id`: admin.
+- `PATCH /api/offers/:id/toggle`: admin.
+- `DELETE /api/offers/:id`: admin.
 
-14. ~~**Buscador con autocompletado en Header**: `Navbar.jsx` precarga todos los productos al montar. Con debounce de 250ms filtra nombre, descripción y categoría. El desplegable muestra hasta 6 resultados con imagen, nombre, categoría y precio. Funciona en desktop (dropdown overlay) y mobile (lista dentro del drawer). Click en resultado navega directamente a `/product/:id`. Click fuera cierra el desplegable vía `ref` + `mousedown` listener.~~ (Completado)
+Pedidos, pagos y comprobantes:
 
-15. ~~**Modal flotante para edición de productos en Admin**: Eliminado el `window.scrollTo({ top: 0 })` del trigger de edición. Al hacer click en "Editar" en la tabla de productos, se abre un overlay `fixed inset-0` con backdrop semitransparente. El modal contiene el `ProductForm` precargado con los datos del producto. Se cierra con el botón X, con "Cancelar" o al guardar los cambios. El scroll de la página no se pierde.~~ (Completado)
-16. ~~**Login único con roles**: Se eliminó el login público separado de admin. `clientes` incorpora `rol`, el superusuario `Admin/Admin` se guarda como `admin`, el JWT incluye el rol y el middleware protege el panel y sus endpoints. El ícono de admin sólo se muestra a usuarios administradores.~~ (Completado)
-17. ~~**Sincronización de ofertas con stock**: Al eliminar un producto, al descontar stock por una venta o al llevarlo a cero desde Admin, las ofertas activas que lo contienen se desactivan sin borrarse y registran `Desactivada: producto sin stock` junto con el producto responsable. El endpoint público filtra ofertas incompletas o sin stock y la reactivación sólo ocurre mediante una acción manual del admin.~~ (Completado)
-18. ~~**Ajuste rápido de stock en Admin**: Se agregaron botones `+/-` en cada fila de productos y el endpoint `PATCH /api/products/:id/stock` para aplicar cambios inmediatos de una unidad, incluyendo la desactivación automática de ofertas y su notificación visible en la pestaña Ofertas.~~ (Completado)
-19. ~~**Fricción consciente para ofertas sin stock**: Al crear o editar una oferta con productos agotados, o reactivar una oferta desactivada automáticamente por falta de stock, el Admin debe confirmar explícitamente mediante un modal con las opciones "Cancelar" / "Activar igual" y el listado de productos afectados.~~ (Completado)
-20. ~~**Advertencia persistente de stock irregular**: Las ofertas activas forzadas por el Admin muestran en el listado de Ofertas el badge `Stock irregular` y los nombres exactos de los productos sin stock. Estas ofertas continúan excluidas de `GET /api/offers/active`, por lo que nunca se publican ni se pueden comprar desde el catálogo.~~ (Completado)
-21. ~~**Confirmación al reactivar ofertas con stock irregular**: El toggle de activación evalúa tanto `desactivada_por_stock` como el stock actual de todos los productos asociados. Si alguno está en `0`, muestra el modal con el listado de productos y las acciones `Cancelar` / `Activar igual`; las ofertas sin problemas se activan directamente.~~ (Completado)
-22. ~~**UX de checkboxes en Admin**: Los checkboxes de destacar productos, seleccionar productos de ofertas y activar ofertas ahora se pueden cambiar haciendo click en el recuadro, el texto o la fila completa de cada opción.~~ (Completado)
-23. ~~**Mensajes y reclamos por pedido**: Se agregó la tabla `mensajes` y endpoints protegidos para consultar, enviar y marcar mensajes como leídos. Los clientes pueden contactar desde `/mis-pedidos`; Admin tiene una pestaña de Mensajes agrupada por pedido, con respuestas y badge de no leídos. El menú de perfil admin reemplaza Mis Pedidos por accesos a Pendientes, Ventas y Mensajes.~~ (Completado)
-24. ~~**Validación transaccional de stock en checkout**: `POST /api/orders` ejecuta todo el flujo con una única conexión PostgreSQL mediante `withTransaction`, descuenta stock con `UPDATE ... WHERE stock >= cantidad RETURNING` y revierte pedido/items/ofertas ante cualquier error. Las compras concurrentes no pueden llevar stock a valores negativos ni sobre-vender unidades.~~ (Completado)
-25. ~~**UX de stock desactualizado en carrito**: Cuando el checkout recibe un rechazo por stock insuficiente, el cliente muestra el producto, las unidades disponibles y ajusta automáticamente la cantidad y el stock del item en el carrito para evitar repetir la compra inválida.~~ (Completado)
-26. ~~**UX de mensajería y notificaciones**: El hilo del Admin permanece abierto al responder y refresca la conversación; los perfiles muestran un badge con el conteo real de mensajes sin leer, que se actualiza al marcar el hilo como leído. En `Mis Pedidos`, el botón cambia de `Contactar sobre este pedido` a `Abrir chat` cuando ya existe conversación.~~ (Completado)
-27. ~~**Cierre y reapertura de reclamos**: El Admin puede cerrar el hilo; se agrega un mensaje de sistema visible al cliente, se bloquea la escritura del hilo cerrado y el cliente puede abrir un reclamo nuevo para el mismo pedido sin mezclar conversaciones.~~ (Completado)
-28. ~~**Reapertura real de reclamos**: La reapertura usa un endpoint propio que crea un nuevo `hilo_id`, agrega el mensaje de sistema `[cliente] reabrió el reclamo` y deja el hilo escribible. El Admin puede volver a cerrarlo definitivamente desde el mismo chat.~~ (Completado)
-29. ~~**Indicador de cierre en Mensajes**: Cada hilo cerrado muestra el badge `Cerrado` en gris en el listado del panel Admin, diferenciándolo de los reclamos abiertos.~~ (Completado)
-30. ~~**Notificaciones visibles de mensajes**: El contador real de mensajes sin leer se muestra como una burbuja superpuesta fuera del botón/avatar de perfil, tanto para admin como para cliente, y se actualiza al marcar conversaciones como leídas. La presentación respeta la paleta NigDiz.~~ (Completado)
+- `GET /api/orders`: admin, lista pedidos con cliente e items.
+- `POST /api/orders`: cliente, recalcula precios en backend, valida stock y exige direccion de entrega.
+- `PATCH /api/orders/:id/status`: admin.
+- `POST /api/orders/:id/comprobante`: cliente propietario, sube JPEG/PNG/PDF de hasta 5 MB y valida firma binaria.
+- `GET /api/orders/:id/comprobante`: cliente propietario o admin, sirve archivo privado.
+- `PATCH /api/admin/orders/:id/approval`: admin, aprueba o rechaza pago por transferencia.
+- `POST /api/webhooks/mercadopago`: webhook publico de Mercado Pago; valida firma con `MP_WEBHOOK_SECRET`, obligatorio cuando `NODE_ENV=production`.
 
-31. ~~**Endurecimiento previo a pagos**: Se eliminó el fallback conocido de `JWT_SECRET`; el backend no inicia sin un secreto de al menos 32 caracteres. Se agregó rate limiting a login/registro, se dejaron de exponer errores internos, el endpoint público ya no devuelve productos inactivos y los productos validan límites y URLs HTTPS.~~ (Completado)
-32. ~~**Retiro del production gate inseguro**: Se eliminó la contraseña fija del bundle del frontend. La protección de un entorno no público debe configurarse en la plataforma de despliegue o en el servidor.~~ (Completado)
-33. ~~**Integración SDK Mercado Pago (Preferencias de Pago)**: Se instaló el paquete `mercadopago` en el backend. Se inicializa `MercadoPagoConfig` con `MP_ACCESS_TOKEN` del entorno. `POST /api/orders` genera una Preferencia de Pago cuando `metodo_pago === 'mercadopago'`, incluyendo los items del pedido con precios recalculados, el recargo como item separado, `external_reference` con el `orderId` y una clave de idempotencia por request. El frontend (`Cart.jsx`) redirige al `init_point` devuelto por la API y limpia el carrito antes de la redirección. Las `back_urls` apuntan a `/mis-pedidos` usando `CLIENT_URL` del entorno.~~ (Completado)
+Mensajes y reclamos:
 
-## 🔐 Reglas de seguridad para implementar pagos
+- `GET /api/orders/:id/messages`: cliente propietario o admin.
+- `POST /api/orders/:id/messages`: cliente propietario o admin.
+- `PATCH /api/orders/:id/messages/read`: marca mensajes como leidos.
+- `PATCH /api/orders/:id/messages/close`: admin, cierra el hilo activo.
+- `PATCH /api/orders/:id/messages/reopen`: cliente, abre un nuevo hilo.
+- `GET /api/messages`: admin, bandeja agrupada por pedido.
 
-- Nunca aceptar desde el frontend el total, precio, estado de pago, rol o identidad del cliente como fuente de verdad; recalcular todo en el backend.
-- Los comprobantes deben validarse por tamaño, MIME real y firma del archivo, guardarse fuera del frontend en almacenamiento privado con nombres aleatorios y servirse sólo mediante URLs autorizadas y temporales.
-- Los endpoints de subida, aprobación y rechazo deben requerir autenticación y autorización explícitas; el cliente sólo puede acceder a comprobantes de sus propios pedidos y el admin sólo mediante `requireAdmin`.
-- Agregar una clave de idempotencia por intento de checkout y verificar la firma de cualquier webhook de la pasarela antes de cambiar estados o registrar pagos.
-- Mantener `JWT_SECRET` y `DATABASE_URL` únicamente como secretos del entorno; nunca commitear `.env`, valores reales ni secretos en bundles.
-- Antes de producción configurar HTTPS, CORS con orígenes explícitos, rate limiting distribuido si hay varias instancias, logs sin datos sensibles y backups protegidos.
+Configuracion y contenido:
 
-## ✅ Estado de seguridad previo a pagos
+- `GET /api/config/banco`: publico.
+- `PUT /api/admin/config/banco`: admin.
+- `GET /api/config/store`: publico, datos generales de tienda.
+- `PUT /api/admin/config/store`: admin, edita datos generales de tienda.
+- `GET /api/content/:key`: publico, solo claves permitidas. Actualmente `home-hero`.
+- `PUT /api/admin/content/:key`: admin.
 
-- `JWT_SECRET` fuerte configurado en el entorno local y en Render; no forma parte del repositorio.
-- `.env` está ignorado por Git y no aparece trackeado ni en el historial de ramas actuales.
-- El checkout usa una única conexión transaccional y descuento atómico de stock.
-- Login y registro tienen rate limiting, y el backend no expone errores internos.
-- La contraseña fija del frontend fue eliminada; el acceso de entornos no públicos debe protegerse desde la plataforma.
-- La idempotencia de preferencias de MercadoPago se resolvió mediante `crypto.randomUUID()` en cada request al SDK.
-- El webhook de Mercado Pago (`POST /api/webhooks/mercadopago`) ya existe y valida la firma criptográfica cuando `MP_WEBHOOK_SECRET` está configurado. Para producción, esa variable debe ser obligatoria y no debe permitirse el bypass que queda disponible para desarrollo.
-- Los comprobantes se guardan en `server/uploads/comprobantes`, se excluyen de Git y no deben servirse como archivos estáticos.
-- El almacenamiento local de Render es efímero; antes de producción los comprobantes deben migrarse a almacenamiento privado persistente (por ejemplo, bucket privado con URLs temporales).
+Envios:
 
-## ✅ Fase 3 - Frontend de transferencias y seguimiento
+- `GET /api/shipping/localities?q=...`: publico, autocompletado de localidades.
+- `POST /api/shipping/quote`: publico, cotiza por `destinationId`.
 
-- El carrito muestra datos bancarios configurables desde la API y permite cargar el comprobante después de crear una transferencia.
-- `ClientOrders.jsx` muestra el stepper del pedido, permite cargar/corregir comprobantes rechazados y descarga comprobantes mediante el endpoint autenticado.
-- `Admin.jsx` muestra comprobantes pendientes de revisión y permite descargarlos, aprobarlos o rechazarlos.
-- No usar variables `VITE_TRANSFER_*`: los datos bancarios se administran mediante la tabla `configuraciones` y sus endpoints protegidos/públicos correspondientes.
+La cotizacion de envio es un simulador en `server/services/shippingService.js`, con origen fijo en Gualeguaychu, Entre Rios. El checkout exige seleccionar una localidad, el backend recalcula la cotizacion por `destinationId`, suma el envio al total confiable y guarda datos de entrega/envio en `pedidos`.
 
-## ✅ Fase 4 - Configuración bancaria dinámica
+## Pagos y checkout
 
-- La tabla `configuraciones` almacena `banco_alias`, `banco_cbu` y `banco_titular`; se inicializa con `server/migrate-bank-config.js`.
-- El comando `npm run migrate:bank-config` debe ejecutarse explícitamente contra Supabase y no forma parte del arranque de Render.
-- `GET /api/config/banco` es público para que el carrito pueda mostrar los datos vigentes.
-- `PUT /api/admin/config/banco` requiere admin y actualiza los tres valores en una única transacción.
-- El carrito ya no usa `VITE_TRANSFER_*`; consulta la configuración bancaria desde la API.
-- Los datos bancarios son públicos para los compradores, pero nunca deben incluir credenciales, tokens o secretos de infraestructura.
+- Metodos soportados: `transferencia`, `efectivo`, `mercadopago`.
+- El backend nunca acepta totales ni precios del frontend como fuente de verdad.
+- Para transferencia:
+  - El pedido nace en `esperando_aprobacion`.
+  - El cliente puede subir comprobante.
+  - El admin aprueba o rechaza desde Ventas.
+- Para efectivo:
+  - El pedido nace en `pendiente`.
+  - El stock se descuenta en la transaccion de creacion.
+- Para Mercado Pago:
+  - El pedido nace en `pendiente_pago`.
+  - Se valida stock al crear el pedido, pero no se descuenta hasta webhook aprobado.
+  - Se genera una preferencia con `external_reference = orderId`.
+  - El recargo se calcula con factor neto `0.934`.
+  - Guarda metadata operativa del pago: `mp_payment_id`, estado, detalle, merchant order, preference id, fecha de aprobacion y ultimo webhook.
+  - El webhook aprobado descuenta stock de forma idempotente y pasa el pedido a `aprobado`.
+  - Si Mercado Pago informa `rejected` o `cancelled` mientras el pedido sigue en `pendiente_pago`, se marca como `pago_rechazado`.
 
----
+El frontend conserva el carrito al redirigir a Mercado Pago. Si el pago falla o queda pendiente y vuelve a `/cart`, permite reintentar. Si vuelve aprobado a `/mis-pedidos`, limpia el carrito.
 
-## ✅ Fase 1 - Cimientos del sistema de pagos
+## Frontend
 
-- Se agregó el ENUM `metodo_pago_enum` y las columnas `pedidos.metodo_pago` y `pedidos.recargo_aplicado` mediante `server/migrate-payment-method.js`.
-- El checkout recalcula el total base en el backend y aplica el factor neto `0.934` para MercadoPago, registrando el recargo en centavos monetarios.
-- El carrito permite seleccionar Transferencia/Efectivo o MercadoPago y muestra el total actualizado en tiempo real.
-- La migración se ejecuta explícitamente con `npm run migrate:payments` desde `server`; no se ejecuta automáticamente al iniciar el servidor.
-- Los comprobantes requieren ejecutar nuevamente la misma migración para agregar `comprobante_url` y los estados de aprobación.
+Rutas:
 
-## ✅ Fase 5 - Integración SDK Mercado Pago, Webhook y UX
+- `/`: Home.
+- `/catalog`: catalogo con busqueda y filtros.
+- `/product/:id`: detalle de producto.
+- `/cart`: carrito y checkout.
+- `/login`: login unico.
+- `/registro`: registro de cliente.
+- `/mis-pedidos`: historial, comprobantes y reclamos del cliente.
+- `/admin`: panel administrativo.
 
-- Se instaló `mercadopago` (SDK v2) como dependencia del backend.
-- El cliente se inicializa con `MP_ACCESS_TOKEN` del entorno; si la variable no existe, el servidor arranca pero rechaza pedidos con método `mercadopago`.
-- **Creación de pedidos (`POST /api/orders`)**: Asigna el estado inicial `pendiente_pago` cuando el método es `mercadopago` (`esperando_aprobacion` para transferencia, `pendiente` para efectivo). Para Mercado Pago, valida que haya stock disponible pero **NO descuenta el stock en ese momento**, manteniendo los productos intactos si el usuario abandona el flujo. Devuelve `{ orderId, init_point, message }`.
-- **Preferencia de Pago**:
-  - `back_urls`: `success` apunta a `${CLIENT_URL}/mis-pedidos`, `failure` y `pending` apuntan a `${CLIENT_URL}/cart`.
-  - `auto_return: 'approved'`.
-  - Los items se construyen con precios recalculados por el backend y recargo como item `RECARGO`. Clave de idempotencia única por request (`crypto.randomUUID()`).
-- **Descuento de Stock en Webhook (`POST /api/webhooks/mercadopago`)**: Al recibir una notificación con estado `approved`, en una única transacción de base de datos (`withTransaction`):
-  - Verifica de forma idempotente que el pedido no haya sido procesado previamente.
-  - Ejecuta el descuento atómico de stock real (`GREATEST(0, stock - ?)`) para cada producto del pedido.
-  - Desactiva ofertas si el stock llega a 0.
-  - Actualiza el estado del pedido a `aprobado`.
-- **Frontend (`Cart.jsx` y `ClientOrders.jsx`)**:
-  - Al redirigir a Mercado Pago, el carrito **no se vacía**. El botón pasa a `"Redirigiendo a Mercado Pago..."` e inhabilita reintentos hasta que se realiza la navegación.
-  - Si el usuario cancela o falla el pago en MP y regresa a `/cart` (URL con `?status=failure`, `?status=null`, etc.), el carrito conserva sus productos, muestra el mensaje `'El pago no se completó, podés volver a intentarlo.'` y permite generar un nuevo link.
-  - Cuando el usuario completa el pago y regresa a `/mis-pedidos?status=approved`, el carrito se limpia automáticamente.
-- **Variables de entorno en Render**: `MP_ACCESS_TOKEN`, `CLIENT_URL` y opcionalmente `MP_WEBHOOK_SECRET`.
+Componentes relevantes:
 
----
+- `Navbar.jsx`: barra superior, buscador con autocompletado, menu de usuario/admin, badge de mensajes y acceso al carrito.
+- `CartDrawer.jsx`: drawer lateral persistente del carrito.
+- `Hero.jsx`: hero editable por admin mediante `content_home_hero`.
+- `ProductCard.jsx`: tarjeta de producto.
+- `OfertaCard.jsx`: tarjeta de oferta/pack.
+- `ReceiptUpload.jsx`: carga de comprobantes.
+- `FeaturedProductSection.jsx`, `FeaturedCategories.jsx`, `AboutNigdizSection.jsx`, `HowToBuySection.jsx`, `SizeGuideSection.jsx`, `ContactSection.jsx`, `Footer.jsx`: secciones de Home/contenido.
 
-## 🔜 Próximos Pasos Pendientes
+Paginas relevantes:
 
-A implementar en la próxima fase:
+- `Home.jsx`: hero, categorias, productos destacados, ofertas y secciones de contenido.
+- `Catalog.jsx`: listado publico, busqueda por URL, filtros y ordenamiento.
+- `ProductDetail.jsx`: detalle, galeria/imagenes y selector de cantidad.
+- `Cart.jsx`: checkout con datos de contacto, direccion obligatoria, cotizador de envio, pagos y comprobante.
+- `ClientOrders.jsx`: seguimiento de pedidos, comprobantes y chat/reclamos.
+- `Admin.jsx`: tabs `products`, `offers`, `sales`, `messages`, `config`.
 
-- **Configuración de Webhook en MercadoPago**: Configurar el URL del Webhook en el Dashboard de Mercado Pago (`https://tu-backend.onrender.com/api/webhooks/mercadopago`) registrando eventos de pago.
-- **Email de confirmación de registro**: Pendiente de configurar servicio de mail (ej. Resend, Nodemailer + SMTP).
+## Panel admin
+
+El panel admin permite:
+
+- Crear, editar, eliminar y reordenar productos con drag and drop.
+- Administrar multiples imagenes por producto; la primera es portada.
+- Ajustar stock con botones rapidos `+/-`.
+- Crear, editar, activar/desactivar y eliminar ofertas.
+- Mostrar advertencias de stock irregular para ofertas.
+- Revisar ventas, separar pendientes/resueltas, cambiar estados y aprobar/rechazar comprobantes.
+- Ver y responder mensajes por pedido; cerrar hilos de reclamo.
+- Editar datos generales de tienda y datos bancarios desde Configuracion.
+- Editar el contenido del hero desde el propio Home si el usuario es admin.
+
+## Diseno visual
+
+- Marca visible: NigDiz.
+- Paleta actual:
+  - Dorado CTA/acento: `#d3ad2f`, hover `#f0dc78`, activo `#b89420`.
+  - Marron oscuro: `#352820`.
+  - Marrones de apoyo: `#4b382b`, `#a78665`.
+  - Celeste/turquesa para superficies y estados positivos.
+- Mantener estilo de pet shop real: producto visible, fondos claros, estructura limpia, bordes definidos y fotografia real o imagen de producto contenida.
+- Evitar reintroducir rojo como color de marca para CTA, hover, focus, enlaces o gradientes. Puede haber clases heredadas todavia visibles en codigo; antes de cambiar UI revisar `client/src/index.css`.
+- Evitar gradientes violetas, estilos SaaS genericos y esquinas exageradas si no corresponden al diseno existente.
+
+## Seguridad y datos sensibles
+
+- `JWT_SECRET` es obligatorio y debe tener al menos 32 caracteres.
+- `DATABASE_URL`, `JWT_SECRET`, tokens de Mercado Pago, SMTP/Resend y cualquier secreto deben vivir solo en entorno.
+- `.env`, `.env*`, `.local/` y `server/uploads/comprobantes/` no deben subirse.
+- Los comprobantes nuevos usan un bucket privado de Supabase Storage cuando estan configuradas las variables del servidor. La base guarda una referencia `supabase:` y la descarga sigue pasando por el endpoint autenticado, que valida propietario/admin. En desarrollo sin Storage se usa `server/uploads/comprobantes`; los archivos locales anteriores siguen siendo compatibles durante la transicion.
+- CORS esta allowlisteado para localhost y dominios configurados en `server/index.js`.
+- El backend desactiva `x-powered-by` y agrega headers basicos: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
+- Login/registro tienen rate limit.
+- En desarrollo, si `MP_WEBHOOK_SECRET` no existe, el webhook avisa y omite validacion de firma. En produccion (`NODE_ENV=production`) rechaza el webhook si falta el secreto.
+
+## Email
+
+Al registrarse un cliente, `sendWelcomeEmail` corre en segundo plano:
+
+- Si `SMTP_PASS` no esta configurado o contiene placeholder, simula el envio en consola.
+- Si `SMTP_PASS` empieza con `re_`, usa la API HTTP de Resend.
+- Si no, usa SMTP con `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
+
+Hay textos internos heredados de Huellitas en el template. Revisar antes de activar email real de marca.
+
+## Checklist de mejoras
+
+### 1. Comprobantes privados persistentes
+
+- [x] Integrar el backend con un bucket privado de Supabase Storage.
+- [x] Mantener validacion de propietario/admin antes de descargar.
+- [x] Validar MIME, firma binaria y limite de 5 MB antes de almacenar.
+- [x] Reemplazar el comprobante anterior sin dejar objetos nuevos huerfanos si falla la base de datos.
+- [x] Mantener lectura compatible de comprobantes locales anteriores durante la transicion.
+- [ ] Crear en Supabase el bucket privado `comprobantes`, con limite de 5 MB y MIME JPEG, PNG y PDF.
+- [ ] Configurar en Render `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (o `SUPABASE_SECRET_KEY`) y `SUPABASE_RECEIPTS_BUCKET=comprobantes`.
+- [ ] Desplegar y probar una carga, descarga y reemplazo reales. En produccion no existe fallback al disco volatil.
+
+### 2. Configuracion general
+
+- [x] Conectar los datos generales de tienda al Footer.
+- [ ] Conectar `GET /api/config/store` a ContactSection y templates de email.
+- [ ] Hacer editables los metodos de pago visibles, instrucciones de transferencia y textos de estados de pago.
+
+### 3. Contenido administrable
+
+- [ ] Ampliar los bloques editables: Como comprar, Sobre NigDiz, contacto, politicas de envio/cambios y franja promocional.
+
+### 4. Mercado Pago en produccion
+
+- [ ] Configurar el webhook real en el dashboard de Mercado Pago apuntando a `/api/webhooks/mercadopago`.
+- [ ] Confirmar `MP_WEBHOOK_SECRET` en Render y ejecutar una compra real controlada.
+- [ ] Verificar cambio de estado, metadata e impacto de stock despues del pago.
+
+### 5. Emails
+
+- [ ] Limpiar branding heredado de Huellitas en los templates.
+- [ ] Activar y probar el proveedor real Resend/SMTP.
+- [ ] Incorporar datos de tienda configurables en los emails.
+
+### 6. Limpieza tecnica y visual
+
+- [ ] Revisar nombres internos heredados de Huellitas en codigo, paquetes y localStorage.
+- [ ] Revisar colores rojos heredados puntuales para alinear completamente la UI con NigDiz.
+- [ ] Resolver advertencias actuales de lint.
+- [ ] Dividir el bundle principal cuando el crecimiento de la aplicacion lo justifique.
+
+### 7. Envios reales
+
+- [ ] Integrar una API real de envios cuando deje de alcanzar el simulador local.
+
+## Reglas de trabajo para futuras sesiones
+
+- No tocar ni publicar secretos.
+- No ejecutar scripts destructivos o migraciones sobre produccion sin confirmacion explicita.
+- No revertir cambios del usuario.
+- Para cambios visuales, respetar la paleta y direccion de NigDiz.
+- Para pagos, stock y roles, la fuente de verdad siempre es el backend.
+- Antes de publicar, correr al menos `npm run build` y revisar que `.local/`, `.env*` y comprobantes privados no aparezcan en Git.

@@ -10,6 +10,13 @@ const defaults = [
   ['banco_alias', ''],
   ['banco_cbu', ''],
   ['banco_titular', ''],
+  ['tienda_nombre', 'NigDiz'],
+  ['tienda_whatsapp', ''],
+  ['tienda_email_contacto', ''],
+  ['tienda_instagram_url', ''],
+  ['tienda_direccion', 'Gualeguaychu, Entre Rios'],
+  ['tienda_horarios', ''],
+  ['tienda_footer_texto', 'Productos pensados para la seguridad, comodidad y felicidad de tus mascotas.'],
 ];
 
 const migrate = async () => {

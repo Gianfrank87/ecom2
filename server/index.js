@@ -13,12 +13,20 @@ import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
 import { MercadoPagoConfig, Preference, Payment, WebhookSignatureValidator } from 'mercadopago';
 import { searchLocalities, calculateShippingQuote } from './services/shippingService.js';
 import { sendWelcomeEmail } from './services/mailer.js';
+import {
+  deleteReceipt,
+  downloadReceipt,
+  isReceiptStorageConfigured,
+  isSupabaseReceiptReference,
+  uploadReceipt,
+} from './services/receiptStorage.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
+const isProduction = process.env.NODE_ENV === 'production';
 
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error('JWT_SECRET es obligatorio y debe tener al menos 32 caracteres.');
@@ -34,6 +42,15 @@ if (MP_ACCESS_TOKEN) {
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
 const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado']);
 const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
+const STORE_CONFIG_FIELDS = {
+  name: { key: 'tienda_nombre', defaultValue: 'NigDiz', maxLength: 80, required: true },
+  whatsapp: { key: 'tienda_whatsapp', defaultValue: '', maxLength: 40 },
+  contactEmail: { key: 'tienda_email_contacto', defaultValue: '', maxLength: 255, type: 'email' },
+  instagramUrl: { key: 'tienda_instagram_url', defaultValue: '', maxLength: 240, type: 'url' },
+  address: { key: 'tienda_direccion', defaultValue: 'Gualeguaychu, Entre Rios', maxLength: 180 },
+  businessHours: { key: 'tienda_horarios', defaultValue: '', maxLength: 180 },
+  footerText: { key: 'tienda_footer_texto', defaultValue: 'Productos pensados para la seguridad, comodidad y felicidad de tus mascotas.', maxLength: 240 },
+};
 const CONTENT_BLOCKS = {
   'home-hero': {
     configKey: 'content_home_hero',
@@ -57,15 +74,7 @@ fs.mkdirSync(uploadsDirectory, { recursive: true });
 
 const allowedReceiptTypes = new Set(['image/jpeg', 'image/png', 'application/pdf']);
 const receiptUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, callback) => callback(null, uploadsDirectory),
-    filename: (_req, file, callback) => {
-      const extension = file.mimetype === 'application/pdf'
-        ? '.pdf'
-        : file.mimetype === 'image/png' ? '.png' : '.jpg';
-      callback(null, `${crypto.randomUUID()}${extension}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
     callback(null, allowedReceiptTypes.has(file.mimetype));
@@ -109,26 +118,31 @@ const authLimiter = rateLimit({
   message: { error: 'Demasiados intentos. Probá nuevamente más tarde.' },
 });
 
-const hasValidReceiptSignature = async (file) => {
-  const handle = await fs.promises.open(file.path, 'r');
-  try {
-    const header = Buffer.alloc(8);
-    await handle.read(header, 0, header.length, 0);
-    if (file.mimetype === 'application/pdf') return header.subarray(0, 5).toString() === '%PDF-';
-    if (file.mimetype === 'image/png') return header.equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-  } finally {
-    await handle.close();
-  }
+const hasValidReceiptSignature = (file) => {
+  const header = file.buffer.subarray(0, 8);
+  if (file.mimetype === 'application/pdf') return header.subarray(0, 5).toString() === '%PDF-';
+  if (file.mimetype === 'image/png') return header.equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
 };
 
-const removeUploadedFile = async (fileName) => {
-  if (!fileName) return;
+const removeLocalReceipt = async (fileName) => {
+  if (!fileName || isSupabaseReceiptReference(fileName)) return;
   const safeName = path.basename(fileName);
   if (safeName !== fileName) return;
   try { await fs.promises.unlink(path.join(uploadsDirectory, safeName)); } catch (error) {
     if (error.code !== 'ENOENT') console.error('No se pudo eliminar el comprobante anterior.');
   }
+};
+
+const removeStoredReceipt = async (reference) => {
+  if (!reference) return;
+  if (isSupabaseReceiptReference(reference)) {
+    try { await deleteReceipt(reference); } catch (error) {
+      console.error('No se pudo eliminar el comprobante anterior de Supabase Storage:', error.message);
+    }
+    return;
+  }
+  await removeLocalReceipt(reference);
 };
 
 app.disable('x-powered-by');
@@ -157,6 +171,83 @@ const getBankConfig = async (query = { all: dbAll }) => {
   );
   const values = Object.fromEntries(rows.map((row) => [row.clave, row.valor]));
   return { alias: values.banco_alias || '', cbu: values.banco_cbu || '', titular: values.banco_titular || '' };
+};
+
+const normalizeStoreConfig = (value = {}) => {
+  const nextConfig = {};
+  for (const [field, rules] of Object.entries(STORE_CONFIG_FIELDS)) {
+    const rawValue = value[field] === undefined || value[field] === null ? rules.defaultValue : value[field];
+    const nextValue = String(rawValue || '').trim();
+    if (rules.required && !nextValue) {
+      throw Object.assign(new Error('El nombre de la tienda es obligatorio.'), { status: 400 });
+    }
+    if (nextValue.length > rules.maxLength) {
+      throw Object.assign(new Error('Los datos generales superan la longitud permitida.'), { status: 400 });
+    }
+    if (rules.type === 'email' && nextValue && !isValidEmail(nextValue)) {
+      throw Object.assign(new Error('El email de contacto no es valido.'), { status: 400 });
+    }
+    if (rules.type === 'url' && nextValue) {
+      try {
+        const url = new URL(nextValue);
+        if (url.protocol !== 'https:') throw new Error('invalid');
+      } catch {
+        throw Object.assign(new Error('La URL de Instagram debe ser HTTPS.'), { status: 400 });
+      }
+    }
+    nextConfig[field] = nextValue;
+  }
+  return nextConfig;
+};
+
+const getStoreConfig = async (query = { all: dbAll }) => {
+  const entries = Object.entries(STORE_CONFIG_FIELDS);
+  const rows = await query.all(
+    `SELECT clave, valor FROM configuraciones WHERE clave IN (${entries.map(() => '?').join(', ')})`,
+    entries.map(([, rules]) => rules.key)
+  );
+  const values = Object.fromEntries(rows.map((row) => [row.clave, row.valor]));
+  return Object.fromEntries(entries.map(([field, rules]) => [field, values[rules.key] ?? rules.defaultValue]));
+};
+
+const normalizeShippingInfo = (shippingInfo = {}) => {
+  const name = String(shippingInfo.name || '').trim();
+  const email = String(shippingInfo.email || '').trim().toLowerCase();
+  const phone = String(shippingInfo.phone || '').trim();
+  const address = String(shippingInfo.address || '').trim();
+  const notes = String(shippingInfo.notes || '').trim();
+  const destinationId = shippingInfo.destinationId
+    || shippingInfo.shippingQuote?.destinationId
+    || shippingInfo.shippingQuote?.destination?.id;
+
+  if (!name || name.length > 120) {
+    throw Object.assign(new Error('El nombre de entrega es obligatorio.'), { status: 400 });
+  }
+  if (!email || !isValidEmail(email) || email.length > 255) {
+    throw Object.assign(new Error('El email de entrega es invalido.'), { status: 400 });
+  }
+  if (!phone || phone.length > 40) {
+    throw Object.assign(new Error('El telefono de entrega es obligatorio.'), { status: 400 });
+  }
+  if (!address || address.length < 3 || address.length > 240) {
+    throw Object.assign(new Error('La direccion de entrega es obligatoria para procesar el pedido.'), { status: 400 });
+  }
+  if (notes.length > 500) {
+    throw Object.assign(new Error('Las notas de entrega no pueden superar los 500 caracteres.'), { status: 400 });
+  }
+  if (!destinationId) {
+    throw Object.assign(new Error('Selecciona una localidad de envio antes de finalizar la compra.'), { status: 400 });
+  }
+
+  const quote = calculateShippingQuote(destinationId);
+  return {
+    name,
+    email,
+    phone,
+    address,
+    notes,
+    quote,
+  };
 };
 
 const normalizeContentBlock = (block, value = {}) => {
@@ -705,6 +796,35 @@ app.put('/api/admin/config/banco', requireAdmin, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
+// GET /api/config/store (public)
+app.get('/api/config/store', async (req, res) => {
+  try {
+    res.json(await getStoreConfig());
+  } catch (error) {
+    internalError(res);
+  }
+});
+
+// PUT /api/admin/config/store (admin only)
+app.put('/api/admin/config/store', requireAdmin, async (req, res) => {
+  try {
+    const config = normalizeStoreConfig(req.body || {});
+    await withTransaction(async (transaction) => {
+      for (const [field, rules] of Object.entries(STORE_CONFIG_FIELDS)) {
+        await transaction.run(
+          `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
+           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+          [rules.key, config[field]]
+        );
+      }
+    });
+    res.json(config);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    internalError(res);
+  }
+});
+
 // GET /api/content/:key (public, allowlisted content blocks)
 app.get('/api/content/:key', async (req, res) => {
   try {
@@ -1087,16 +1207,14 @@ app.post('/api/orders', requireClient, async (req, res) => {
   try {
     const { items, metodo_pago: paymentMethod, shippingInfo } = req.body;
     if (!PAYMENT_METHODS.has(paymentMethod)) {
-      return res.status(400).json({ error: 'Método de pago inválido.' });
+      return res.status(400).json({ error: 'Metodo de pago invalido.' });
     }
-    const address = String(shippingInfo?.address || '').trim();
-    if (!address || address.length < 3) {
-      return res.status(400).json({ error: 'La dirección de entrega es obligatoria para procesar el pedido.' });
-    }
+    const delivery = normalizeShippingInfo(shippingInfo);
 
-    const { orderId, trustedOrder, surcharge } = await withTransaction(async (transaction) => {
+    const { orderId, trustedOrder, surcharge, shippingCost, chargedTotal } = await withTransaction(async (transaction) => {
       const trustedOrder = await getTrustedOrderLines(items, transaction);
-      const baseTotalCents = Math.round(trustedOrder.total * 100);
+      const shippingCost = Number(delivery.quote.price || 0);
+      const baseTotalCents = Math.round((trustedOrder.total + shippingCost) * 100);
       const chargedTotalCents = paymentMethod === 'mercadopago'
         ? Math.round(baseTotalCents / MERCADOPAGO_NET_FACTOR)
         : baseTotalCents;
@@ -1126,7 +1244,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
           if (!product) {
             const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
             if (!current) {
-              throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
+              throw Object.assign(new Error(`El producto ${requested.name} ya no esta disponible.`), { status: 409 });
             }
             throw Object.assign(
               new Error(`Solo quedan ${current.stock} unidades de ${current.nombre}.`),
@@ -1139,7 +1257,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
         for (const [productId, requested] of requestedByProduct) {
           const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ? AND activo = TRUE', [productId]);
           if (!current) {
-            throw Object.assign(new Error(`El producto ${requested.name} ya no está disponible.`), { status: 409 });
+            throw Object.assign(new Error(`El producto ${requested.name} ya no esta disponible.`), { status: 409 });
           }
           if (current.stock < requested.quantity) {
             throw Object.assign(
@@ -1157,8 +1275,28 @@ app.post('/api/orders', requireClient, async (req, res) => {
           : 'pendiente';
 
       const orderResult = await transaction.run(
-        'INSERT INTO pedidos (cliente_id, total, estado, metodo_pago, recargo_aplicado) VALUES (?, ?, ?, ?, ?) RETURNING id',
-        [req.user.id, chargedTotal, initialStatus, paymentMethod, surcharge]
+        `INSERT INTO pedidos (
+          cliente_id, total, estado, metodo_pago, recargo_aplicado,
+          entrega_nombre, entrega_email, entrega_telefono, entrega_direccion, entrega_notas,
+          envio_destination_id, envio_localidad, envio_provincia, envio_cp, envio_costo
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [
+          req.user.id,
+          chargedTotal,
+          initialStatus,
+          paymentMethod,
+          surcharge,
+          delivery.name,
+          delivery.email,
+          delivery.phone,
+          delivery.address,
+          delivery.notes,
+          delivery.quote.destination.id,
+          delivery.quote.destination.localidad,
+          delivery.quote.destination.provincia,
+          delivery.quote.destination.cp,
+          shippingCost
+        ]
       );
       const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
 
@@ -1175,13 +1313,13 @@ app.post('/api/orders', requireClient, async (req, res) => {
         }
       }
 
-      return { orderId: pedidoId, trustedOrder, surcharge };
+      return { orderId: pedidoId, trustedOrder, surcharge, shippingCost, chargedTotal };
     });
 
     let init_point = null;
     if (paymentMethod === 'mercadopago') {
       if (!mpClient) {
-        throw Object.assign(new Error('Mercado Pago no está configurado en el servidor.'), { status: 500 });
+        throw Object.assign(new Error('Mercado Pago no esta configurado en el servidor.'), { status: 500 });
       }
 
       const preference = new Preference(mpClient);
@@ -1194,6 +1332,16 @@ app.post('/api/orders', requireClient, async (req, res) => {
         unit_price: line.unitPrice,
         currency_id: 'ARS'
       }));
+
+      if (shippingCost > 0) {
+        preferenceItems.push({
+          id: 'ENVIO',
+          title: `Envio a ${delivery.quote.destination.localidad}`,
+          quantity: 1,
+          unit_price: shippingCost,
+          currency_id: 'ARS'
+        });
+      }
 
       if (surcharge > 0) {
         preferenceItems.push({
@@ -1222,11 +1370,24 @@ app.post('/api/orders', requireClient, async (req, res) => {
       });
 
       init_point = prefResult.init_point;
+      if (prefResult.id) {
+        await dbRun(
+          "UPDATE pedidos SET mp_preference_id = ? WHERE id = ? AND metodo_pago = 'mercadopago'",
+          [String(prefResult.id), orderId]
+        );
+      }
     }
 
     res.status(201).json({
       orderId,
       init_point,
+      total: chargedTotal,
+      shipping: {
+        destination: delivery.quote.destination,
+        origin: delivery.quote.origin,
+        price: shippingCost,
+        formattedPrice: delivery.quote.formattedPrice
+      },
       message: 'Pedido creado exitosamente'
     });
   } catch (err) {
@@ -1250,6 +1411,11 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     const xRequestId = req.headers['x-request-id'];
     const dataId = req.query['data.id'] || req.query.id || req.body?.data?.id || req.body?.id;
 
+    if (!secret && isProduction) {
+      console.error('MP_WEBHOOK_SECRET es obligatorio en produccion. Webhook rechazado.');
+      return res.status(500).json({ error: 'Webhook no configurado.' });
+    }
+
     if (secret) {
       try {
         WebhookSignatureValidator.validate({
@@ -1259,70 +1425,140 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
           secret
         });
       } catch (validationError) {
-        console.error('Firma de webhook de Mercado Pago inválida:', validationError.message);
-        return res.status(401).json({ error: 'Firma de webhook inválida.' });
+        console.error('Firma de webhook de Mercado Pago invalida:', validationError.message);
+        return res.status(401).json({ error: 'Firma de webhook invalida.' });
       }
     } else {
-      console.warn('⚠️ MP_WEBHOOK_SECRET no está configurado. Se omite la validación de firma en desarrollo.');
+      console.warn('MP_WEBHOOK_SECRET no esta configurado. Se omite la validacion de firma solo en desarrollo.');
     }
 
     const type = req.query.type || req.query.topic || req.body?.type || req.body?.action;
+    const isPaymentEvent = type === 'payment' || req.body?.action?.startsWith('payment.');
 
-    if ((type === 'payment' || req.body?.action?.startsWith('payment.')) && dataId && mpClient) {
-      const payment = new Payment(mpClient);
-      const paymentData = await payment.get({ id: dataId });
+    if (!isPaymentEvent || !dataId) {
+      return res.status(200).send('OK');
+    }
 
-      if (paymentData && paymentData.status === 'approved') {
-        const orderId = paymentData.external_reference;
-        if (orderId) {
-          await withTransaction(async (transaction) => {
-            const order = await transaction.get(
-              'SELECT id, estado FROM pedidos WHERE id = ?',
-              [orderId]
-            );
+    if (!mpClient) {
+      console.warn('Mercado Pago no esta configurado; no se pudo consultar el pago del webhook.');
+      return res.status(200).send('OK');
+    }
 
-            if (!order || order.estado === 'aprobado') {
-              return;
-            }
+    const payment = new Payment(mpClient);
+    const paymentData = await payment.get({ id: dataId });
+    if (!paymentData) return res.status(200).send('OK');
 
-            const items = await transaction.all(
-              `SELECT pi.producto_id, pi.cantidad, pr.nombre AS producto_nombre
-               FROM pedido_items pi
-               JOIN productos pr ON pr.id = pi.producto_id
-               WHERE pi.pedido_id = ?`,
-              [orderId]
-            );
+    const orderId = paymentData.external_reference;
+    if (!orderId) {
+      console.warn('Pago de Mercado Pago sin external_reference:', paymentData.id);
+      return res.status(200).send('OK');
+    }
 
-            const requestedByProduct = new Map();
-            for (const item of items) {
-              const productId = String(item.producto_id);
-              const current = requestedByProduct.get(productId) || { quantity: 0, name: item.producto_nombre };
-              current.quantity += item.cantidad;
-              requestedByProduct.set(productId, current);
-            }
+    const paymentId = String(paymentData.id || dataId);
+    const paymentStatus = String(paymentData.status || 'unknown');
+    const paymentStatusDetail = paymentData.status_detail ? String(paymentData.status_detail) : null;
+    const merchantOrderId = paymentData.merchant_order_id || paymentData.order?.id || null;
+    const preferenceId = paymentData.preference_id || null;
+    const approvedAt = paymentData.date_approved || null;
 
-            for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
-              const result = await transaction.run(
-                `UPDATE productos
-                 SET stock = GREATEST(0, stock - ?)
-                 WHERE id = ?
-                 RETURNING id, nombre, stock`,
-                [requested.quantity, productId]
-              );
-              const product = result.rows?.[0];
-              if (product && Number(product.stock) === 0) {
-                await deactivateOffersForProduct(product.id, product.nombre, transaction);
-              }
-            }
+    await withTransaction(async (transaction) => {
+      const order = await transaction.get(
+        'SELECT id, estado, metodo_pago, mp_payment_id FROM pedidos WHERE id = ?',
+        [orderId]
+      );
 
-            await transaction.run(
-              "UPDATE pedidos SET estado = 'aprobado' WHERE id = ?",
-              [orderId]
-            );
-          });
+      if (!order) {
+        console.warn('Webhook MP para pedido inexistente:', orderId, 'payment:', paymentId);
+        return;
+      }
+
+      if (order.metodo_pago !== 'mercadopago') {
+        console.warn('Webhook MP recibido para pedido no Mercado Pago:', orderId, 'payment:', paymentId);
+        return;
+      }
+
+      await transaction.run(
+        'UPDATE pedidos ' +
+        'SET mp_payment_id = COALESCE(mp_payment_id, ?), ' +
+        'mp_payment_status = ?, ' +
+        'mp_payment_status_detail = ?, ' +
+        'mp_merchant_order_id = COALESCE(?, mp_merchant_order_id), ' +
+        'mp_preference_id = COALESCE(?, mp_preference_id), ' +
+        "mp_approved_at = CASE WHEN ? = 'approved' THEN COALESCE(?, mp_approved_at) ELSE mp_approved_at END, " +
+        'mp_last_webhook_at = CURRENT_TIMESTAMP ' +
+        'WHERE id = ?',
+        [
+          paymentId,
+          paymentStatus,
+          paymentStatusDetail,
+          merchantOrderId ? String(merchantOrderId) : null,
+          preferenceId ? String(preferenceId) : null,
+          paymentStatus,
+          approvedAt,
+          orderId
+        ]
+      );
+
+      if (paymentStatus !== 'approved') {
+        if (['rejected', 'cancelled'].includes(paymentStatus) && order.estado === 'pendiente_pago') {
+          await transaction.run(
+            "UPDATE pedidos SET estado = 'pago_rechazado' WHERE id = ?",
+            [orderId]
+          );
+        }
+        return;
+      }
+
+      if (order.estado === 'aprobado') {
+        return;
+      }
+
+      if (order.mp_payment_id && String(order.mp_payment_id) !== paymentId) {
+        console.warn('Pedido con payment_id previo distinto. No se descuenta stock nuevamente:', orderId);
+        return;
+      }
+
+      const items = await transaction.all(
+        'SELECT pi.producto_id, pi.cantidad, pr.nombre AS producto_nombre ' +
+        'FROM pedido_items pi ' +
+        'JOIN productos pr ON pr.id = pi.producto_id ' +
+        'WHERE pi.pedido_id = ?',
+        [orderId]
+      );
+
+      const requestedByProduct = new Map();
+      for (const item of items) {
+        const productId = String(item.producto_id);
+        const current = requestedByProduct.get(productId) || { quantity: 0, name: item.producto_nombre };
+        current.quantity += item.cantidad;
+        requestedByProduct.set(productId, current);
+      }
+
+      for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
+        const result = await transaction.run(
+          'UPDATE productos ' +
+          'SET stock = GREATEST(0, stock - ?) ' +
+          'WHERE id = ? ' +
+          'RETURNING id, nombre, stock',
+          [requested.quantity, productId]
+        );
+        const product = result.rows?.[0];
+        if (product && Number(product.stock) === 0) {
+          await deactivateOffersForProduct(product.id, product.nombre, transaction);
         }
       }
-    }
+
+      await transaction.run(
+        'UPDATE pedidos ' +
+        "SET estado = 'aprobado', " +
+        'mp_payment_status = ?, ' +
+        'mp_payment_status_detail = ?, ' +
+        'mp_approved_at = COALESCE(?, mp_approved_at), ' +
+        'mp_last_webhook_at = CURRENT_TIMESTAMP ' +
+        'WHERE id = ?',
+        [paymentStatus, paymentStatusDetail, approvedAt, orderId]
+      );
+    });
 
     res.status(200).send('OK');
   } catch (err) {
@@ -1330,7 +1566,6 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     res.status(200).send('OK');
   }
 });
-
 const runReceiptUpload = (req, res, next) => receiptUpload.single('comprobante')(req, res, (error) => {
   if (!error) return next();
   if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
@@ -1341,6 +1576,7 @@ const runReceiptUpload = (req, res, next) => receiptUpload.single('comprobante')
 
 // POST /api/orders/:id/comprobante (protected owner)
 app.post('/api/orders/:id/comprobante', requireClient, runReceiptUpload, async (req, res) => {
+  let newReceiptReference = '';
   try {
     if (req.user.role === 'admin') return res.status(403).json({ error: 'Sólo el cliente puede subir comprobantes.' });
     const order = await dbGet(
@@ -1355,22 +1591,40 @@ app.post('/api/orders/:id/comprobante', requireClient, runReceiptUpload, async (
     }
     if (!req.file) return res.status(400).json({ error: 'Debés adjuntar un comprobante.' });
 
-    const validSignature = await hasValidReceiptSignature(req.file);
+    const validSignature = hasValidReceiptSignature(req.file);
     if (!validSignature) {
-      await removeUploadedFile(req.file.filename);
       return res.status(400).json({ error: 'El contenido del archivo no coincide con su tipo.' });
+    }
+
+    const extension = req.file.mimetype === 'application/pdf'
+      ? '.pdf'
+      : req.file.mimetype === 'image/png' ? '.png' : '.jpg';
+    const generatedName = `${crypto.randomUUID()}${extension}`;
+
+    if (isReceiptStorageConfigured()) {
+      newReceiptReference = await uploadReceipt({
+        objectPath: `pedidos/${order.id}/${generatedName}`,
+        buffer: req.file.buffer,
+        contentType: req.file.mimetype,
+      });
+    } else {
+      if (isProduction) {
+        return res.status(503).json({ error: 'El almacenamiento de comprobantes no está configurado.' });
+      }
+      await fs.promises.writeFile(path.join(uploadsDirectory, generatedName), req.file.buffer, { flag: 'wx' });
+      newReceiptReference = generatedName;
     }
 
     await dbRun(
       `UPDATE pedidos SET comprobante_url = ?, estado = 'esperando_aprobacion'
        WHERE id = ? AND cliente_id = ? AND metodo_pago = 'transferencia'`,
-      [req.file.filename, req.params.id, req.user.id]
+      [newReceiptReference, req.params.id, req.user.id]
     );
-    if (order.comprobante_url) await removeUploadedFile(order.comprobante_url);
+    if (order.comprobante_url) await removeStoredReceipt(order.comprobante_url);
     res.status(201).json({ message: 'Comprobante recibido.', estado: 'esperando_aprobacion' });
   } catch (error) {
-    if (req.file) await removeUploadedFile(req.file.filename);
-    internalError(res);
+    if (newReceiptReference) await removeStoredReceipt(newReceiptReference);
+    internalError(res, error);
   }
 });
 
@@ -1386,6 +1640,16 @@ app.get('/api/orders/:id/comprobante', requireClient, async (req, res) => {
       return res.status(403).json({ error: 'No tenés permiso para este pedido.' });
     }
     if (!order.comprobante_url) return res.status(404).json({ error: 'Este pedido no tiene comprobante.' });
+
+    if (isSupabaseReceiptReference(order.comprobante_url)) {
+      const storedReceipt = await downloadReceipt(order.comprobante_url);
+      const fileName = path.basename(order.comprobante_url);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('Content-Type', storedReceipt.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(storedReceipt.buffer);
+    }
+
     const fileName = path.basename(order.comprobante_url);
     if (fileName !== order.comprobante_url) return res.status(404).json({ error: 'Comprobante no encontrado.' });
     const filePath = path.join(uploadsDirectory, fileName);
@@ -1396,7 +1660,7 @@ app.get('/api/orders/:id/comprobante', requireClient, async (req, res) => {
       if (error && !res.headersSent) internalError(res);
     });
   } catch (error) {
-    internalError(res);
+    internalError(res, error);
   }
 });
 
@@ -1466,6 +1730,30 @@ app.post('/api/shipping/quote', (req, res) => {
 const ensureDatabaseSchema = async () => {
   try {
     await dbRun('ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagenes TEXT');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_nombre VARCHAR(120)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_email VARCHAR(255)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_telefono VARCHAR(40)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_direccion VARCHAR(240)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_notas TEXT');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_destination_id INTEGER');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_localidad VARCHAR(120)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_provincia VARCHAR(120)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_cp VARCHAR(20)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_costo NUMERIC(12,2) NOT NULL DEFAULT 0');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_payment_id VARCHAR(80)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_payment_status VARCHAR(40)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_payment_status_detail VARCHAR(120)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_merchant_order_id VARCHAR(120)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_preference_id VARCHAR(120)');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_approved_at TIMESTAMPTZ');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_last_webhook_at TIMESTAMPTZ');
+    await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS pedidos_mp_payment_id_unique ON pedidos(mp_payment_id) WHERE mp_payment_id IS NOT NULL');
+    for (const rules of Object.values(STORE_CONFIG_FIELDS)) {
+      await dbRun(
+        'INSERT INTO configuraciones (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO NOTHING',
+        [rules.key, rules.defaultValue]
+      );
+    }
     await dbRun(`
       DO $$
       DECLARE

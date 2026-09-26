@@ -152,6 +152,25 @@ export const api = {
   },
 
   // ─── Client Auth ───
+  getStoreConfig: async () => {
+    const res = await fetch(`${API_URL}/config/store`);
+    if (!res.ok) throw new Error('Error al obtener los datos de la tienda');
+    return res.json();
+  },
+
+  updateStoreConfig: async (config) => {
+    const res = await fetch(`${API_URL}/admin/config/store`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(config)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al guardar los datos de la tienda');
+    }
+    return res.json();
+  },
+
   clientRegister: async (name, email, password) => {
     const res = await fetch(`${API_URL}/clients/register`, {
       method: 'POST',
