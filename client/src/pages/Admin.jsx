@@ -682,6 +682,41 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
   const [loading, setLoading] = useState(false);
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (!preview) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') closePreview();
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleEscape);
+      URL.revokeObjectURL(preview.url);
+    };
+  }, [preview]);
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const openReceiptPreview = async () => {
+    if (previewLoading) return;
+    setPreviewLoading(true);
+    try {
+      const blob = await api.downloadOrderReceipt(order.id);
+      setPreview({ url: URL.createObjectURL(blob), type: blob.type });
+    } catch (error) {
+      onFeedback(error.message, 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const downloadReceipt = async () => {
     try {
@@ -724,8 +759,8 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
           <p className="text-xs font-black text-gray-900 mt-1">{formatPrice(order.total)}</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          <button type="button" onClick={downloadReceipt} className="inline-flex items-center gap-1.5 rounded-none border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#f0dc78] hover:bg-[#4b382b] cursor-pointer">
-            <FileText className="w-3.5 h-3.5" /> Ver / descargar
+          <button type="button" onClick={openReceiptPreview} disabled={previewLoading} className="inline-flex items-center gap-1.5 rounded-none border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#f0dc78] hover:bg-[#4b382b] disabled:opacity-50 cursor-pointer">
+            <FileText className="w-3.5 h-3.5" /> {previewLoading ? 'Abriendo...' : 'Ver comprobante'}
           </button>
           <button type="button" onClick={() => handleDecision('approved')} disabled={loading} className="inline-flex items-center gap-1.5 rounded-none bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
             <CheckCircle className="w-3.5 h-3.5" /> Aprobar Pago
@@ -742,6 +777,29 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => { setShowRejectForm(false); setRejectionReason(''); }} disabled={loading} className="border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 cursor-pointer">Cancelar</button>
             <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 bg-red-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-800 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"><XCircle className="w-3.5 h-3.5" /> Confirmar rechazo</button>
+          </div>
+        </div>
+      )}
+      {preview && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) closePreview(); }} role="presentation">
+          <div className="flex h-[92dvh] w-full max-w-5xl flex-col border border-[#352820] bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 p-3 sm:px-5">
+              <div>
+                <p className="text-sm font-extrabold text-[#352820]">Comprobante del pedido #{order.id}</p>
+                <p className="text-[11px] font-semibold text-gray-500">{order.cliente_nombre}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={downloadReceipt} className="border border-[#352820] px-3 py-2 text-xs font-extrabold text-[#352820] hover:bg-gray-100 cursor-pointer">Descargar</button>
+                <button type="button" onClick={closePreview} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-black cursor-pointer" aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-3">
+              {preview.type === 'application/pdf' ? (
+                <iframe src={preview.url} title={`Comprobante del pedido ${order.id}`} className="h-full min-h-[70dvh] w-full border-0 bg-white" />
+              ) : (
+                <img src={preview.url} alt={`Comprobante del pedido ${order.id}`} className="mx-auto h-full max-h-full w-auto max-w-full object-contain" />
+              )}
+            </div>
           </div>
         </div>
       )}
