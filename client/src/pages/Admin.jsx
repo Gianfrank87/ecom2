@@ -831,6 +831,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(new URLSearchParams(location.search).get('tab') || 'products');
   const [salesView, setSalesView] = useState('pending');
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [highlightAttentionOrders, setHighlightAttentionOrders] = useState(false);
 
   const [products, setProducts] = useState([]);
   const [offers, setOffers] = useState([]);
@@ -849,6 +850,20 @@ export default function Admin() {
   const [feedback, setFeedback] = useState(null);
   const [stockWarning, setStockWarning] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!highlightAttentionOrders) return undefined;
+
+    const scrollFrame = requestAnimationFrame(() => {
+      document.getElementById('sales-orders-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    const highlightTimer = window.setTimeout(() => setHighlightAttentionOrders(false), 3500);
+
+    return () => {
+      cancelAnimationFrame(scrollFrame);
+      window.clearTimeout(highlightTimer);
+    };
+  }, [highlightAttentionOrders, salesView]);
 
   useEffect(() => {
     if (!editProduct) return undefined;
@@ -1475,7 +1490,7 @@ export default function Admin() {
               })}
             </div>
             {pendingReceiptOrders.length > 0 && (
-              <button type="button" onClick={() => setSalesView('pending')} className="flex w-full items-center gap-4 border border-amber-300 bg-amber-50 px-5 py-4 text-left hover:bg-amber-100 cursor-pointer">
+              <button type="button" onClick={() => { setSalesView('pending'); setHighlightAttentionOrders(false); requestAnimationFrame(() => setHighlightAttentionOrders(true)); }} className="flex w-full items-center gap-4 border border-amber-300 bg-amber-50 px-5 py-4 text-left transition-colors duration-300 hover:bg-amber-100 cursor-pointer">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#d3ad2f] text-lg font-black text-[#352820]">!</span>
                 <span>
                   <span className="block text-sm font-black text-[#352820]">{pendingReceiptOrders.length} pedido{pendingReceiptOrders.length !== 1 ? 's' : ''} requiere{pendingReceiptOrders.length === 1 ? '' : 'n'} atención</span>
@@ -1540,7 +1555,7 @@ export default function Admin() {
             )}
 
             {filteredOrders.length > 0 && (
-              <div className="overflow-hidden border border-gray-200 bg-white shadow-xs">
+              <div id="sales-orders-table" className="scroll-mt-6 overflow-hidden border border-gray-200 bg-white shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[920px] border-collapse">
                     <thead className="bg-gray-50 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">
@@ -1554,22 +1569,20 @@ export default function Admin() {
                         const expanded = expandedOrderId === order.id;
                         return (
                           <React.Fragment key={order.id}>
-                            <tr className="hover:bg-[#fcfaf5]">
+                            <tr className={`transition-colors duration-700 hover:bg-[#fcfaf5] ${highlightAttentionOrders && pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'bg-amber-100' : 'bg-white'}`}>
                               <td className="px-5 py-4"><p className="text-sm font-black text-gray-950">#{order.id}</p><p className="mt-0.5 text-[11px] font-semibold text-gray-500">{new Date(order.fecha).toLocaleString()}</p></td>
                               <td className="px-5 py-4"><p className="text-sm font-extrabold text-gray-900">{order.cliente_nombre}</p><p className="text-[11px] font-medium text-gray-500">{order.cliente_email}</p></td>
                               <td className="px-5 py-4"><div className="flex items-center gap-3">{firstItem?.producto_imagen && <img src={firstItem.producto_imagen} alt="" className="h-11 w-11 border border-gray-200 bg-white object-contain p-1" />}<div><p className="max-w-56 truncate text-xs font-bold text-gray-900">{firstItem ? `${firstItem.producto_nombre} × ${firstItem.cantidad}` : 'Sin detalle'}</p>{(order.items?.length || 0) > 1 && <p className="text-[10px] font-semibold text-gray-500">+ {order.items.length - 1} producto{order.items.length > 2 ? 's' : ''}</p>}</div></div></td>
                               <td className="px-5 py-4 text-sm font-black text-gray-950">{formatPrice(order.total)}</td>
                               <td className="px-5 py-4"><span className={`inline-flex px-3 py-2 text-xs font-extrabold ${statusClass}`}>{statusLabel}</span></td>
-                              <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} className="bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] hover:bg-[#c39e22] cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}</button></td>
+                              <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} aria-expanded={expanded} className="inline-flex items-center gap-2 bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] transition-all duration-300 hover:bg-[#c39e22] hover:shadow-sm cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}<ArrowDown className={`h-3.5 w-3.5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} /></button></td>
                             </tr>
-                            {expanded && (
-                              <tr><td colSpan="6" className="bg-[#faf8f3] px-5 py-5"><div className="grid gap-5 lg:grid-cols-3">
+                            <tr><td colSpan="6" className="bg-[#faf8f3] p-0"><div className={`grid transition-[grid-template-rows,opacity] duration-500 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}><div className="overflow-hidden"><div className="grid gap-5 px-5 py-5 lg:grid-cols-3">
                                 {pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) && <div className="lg:col-span-3"><ReceiptReviewCard order={order} onFeedback={showFeedback} onUpdated={refreshOrders} compact /></div>}
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Entrega</p><div className="space-y-1 text-xs font-semibold text-gray-700">{order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}{order.entrega_telefono && <p><strong>Teléfono:</strong> {order.entrega_telefono}</p>}{order.entrega_direccion && <p><strong>Dirección:</strong> {order.entrega_direccion}</p>}{order.envio_localidad && <p><strong>Destino:</strong> {order.envio_localidad}, {order.envio_provincia}</p>}</div></div>
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex justify-between gap-3 text-xs"><span className="font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
                                 <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
-                              </div></td></tr>
-                            )}
+                              </div></div></div></td></tr>
                           </React.Fragment>
                         );
                       })}
