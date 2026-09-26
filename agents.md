@@ -262,9 +262,10 @@ Hay textos internos heredados de Huellitas en el template. Revisar antes de acti
 - [x] Validar MIME, firma binaria y limite de 5 MB antes de almacenar.
 - [x] Reemplazar el comprobante anterior sin dejar objetos nuevos huerfanos si falla la base de datos.
 - [x] Mantener lectura compatible de comprobantes locales anteriores durante la transicion.
-- [ ] Crear en Supabase el bucket privado `comprobantes`, con limite de 5 MB y MIME JPEG, PNG y PDF.
-- [ ] Configurar en Render `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (o `SUPABASE_SECRET_KEY`) y `SUPABASE_RECEIPTS_BUCKET=comprobantes`.
-- [ ] Desplegar y probar una carga, descarga y reemplazo reales. En produccion no existe fallback al disco volatil.
+- [x] Crear en Supabase el bucket privado `comprobantes`, con limite de 5 MB y MIME JPEG, PNG y PDF.
+- [x] Configurar en Render `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (o `SUPABASE_SECRET_KEY`) y `SUPABASE_RECEIPTS_BUCKET=comprobantes`.
+- [x] Desplegar el backend con la integracion y verificar que la API nueva responde en produccion.
+- [ ] Probar una carga, descarga y reemplazo reales. En produccion no existe fallback al disco volatil.
 
 ### 2. Configuracion general
 
