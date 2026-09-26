@@ -789,10 +789,26 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
                 <p className="text-[11px] font-semibold text-gray-500">{order.cliente_nombre}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button type="button" onClick={() => handleDecision('approved')} disabled={loading} className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"><CheckCircle className="h-3.5 w-3.5" /> Aprobar</button>
+                <button type="button" onClick={() => setShowRejectForm(true)} disabled={loading} className="hidden sm:inline-flex items-center gap-1.5 border border-red-300 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 hover:bg-red-100 disabled:opacity-50 cursor-pointer"><XCircle className="h-3.5 w-3.5" /> Rechazar</button>
                 <button type="button" onClick={downloadReceipt} className="border border-[#352820] px-3 py-2 text-xs font-extrabold text-[#352820] hover:bg-gray-100 cursor-pointer">Descargar</button>
                 <button type="button" onClick={closePreview} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-black cursor-pointer" aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>
               </div>
             </div>
+            <div className="flex gap-2 border-b border-gray-200 p-3 sm:hidden">
+              <button type="button" onClick={() => handleDecision('approved')} disabled={loading} className="inline-flex flex-1 items-center justify-center gap-1.5 bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50 cursor-pointer"><CheckCircle className="h-3.5 w-3.5" /> Aprobar</button>
+              <button type="button" onClick={() => setShowRejectForm(true)} disabled={loading} className="inline-flex flex-1 items-center justify-center gap-1.5 border border-red-300 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 disabled:opacity-50 cursor-pointer"><XCircle className="h-3.5 w-3.5" /> Rechazar</button>
+            </div>
+            {showRejectForm && (
+              <div className="border-b border-red-300 bg-red-50 p-3 space-y-2">
+                <label htmlFor={`preview-rejection-reason-${order.id}`} className="block text-xs font-extrabold text-red-900">Motivo que verá el cliente</label>
+                <textarea id={`preview-rejection-reason-${order.id}`} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength="500" rows="2" placeholder="Explicá por qué no se pudo validar el pago." className="w-full resize-y border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500" />
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => { setShowRejectForm(false); setRejectionReason(''); }} disabled={loading} className="border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 cursor-pointer">Cancelar</button>
+                  <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 bg-red-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-800 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"><XCircle className="h-3.5 w-3.5" /> Confirmar rechazo</button>
+                </div>
+              </div>
+            )}
             <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-3">
               {preview.type === 'application/pdf' ? (
                 <iframe src={preview.url} title={`Comprobante del pedido ${order.id}`} className="h-full min-h-[70dvh] w-full border-0 bg-white" />
