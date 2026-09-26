@@ -680,6 +680,8 @@ function StoreConfigForm({ showFeedback }) {
 
 function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
   const [loading, setLoading] = useState(false);
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const downloadReceipt = async () => {
     try {
@@ -697,9 +699,13 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
 
   const handleDecision = async (decision) => {
     if (loading) return;
+    if (decision === 'rejected' && rejectionReason.trim().length < 5) {
+      onFeedback('Escribí el motivo del rechazo antes de confirmarlo.', 'error');
+      return;
+    }
     setLoading(true);
     try {
-      await api.approveOrderPayment(order.id, decision);
+      await api.approveOrderPayment(order.id, decision, rejectionReason.trim());
       onFeedback(decision === 'approved' ? 'Pago aprobado.' : 'Pago rechazado.');
       onUpdated();
     } catch (error) {
@@ -710,23 +716,35 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated }) {
   };
 
   return (
-    <div className="rounded-none border border-amber-200 bg-amber-50/60 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="text-sm font-extrabold text-gray-900">Pedido #{order.id}</p>
-        <p className="text-xs text-gray-600 mt-1">{order.cliente_nombre} · {order.cliente_email}</p>
-        <p className="text-xs font-black text-gray-900 mt-1">{formatPrice(order.total)}</p>
+    <div className="rounded-none border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-extrabold text-gray-900">Pedido #{order.id}</p>
+          <p className="text-xs text-gray-600 mt-1">{order.cliente_nombre} · {order.cliente_email}</p>
+          <p className="text-xs font-black text-gray-900 mt-1">{formatPrice(order.total)}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <button type="button" onClick={downloadReceipt} className="inline-flex items-center gap-1.5 rounded-none border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#f0dc78] hover:bg-[#4b382b] cursor-pointer">
+            <FileText className="w-3.5 h-3.5" /> Ver / descargar
+          </button>
+          <button type="button" onClick={() => handleDecision('approved')} disabled={loading} className="inline-flex items-center gap-1.5 rounded-none bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
+            <CheckCircle className="w-3.5 h-3.5" /> Aprobar Pago
+          </button>
+          <button type="button" onClick={() => setShowRejectForm(true)} disabled={loading} className="inline-flex items-center gap-1.5 rounded-none border border-red-300 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 hover:bg-red-100 disabled:opacity-50 cursor-pointer">
+            <XCircle className="w-3.5 h-3.5" /> Rechazar Pago
+          </button>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2 sm:justify-end">
-        <button type="button" onClick={downloadReceipt} className="inline-flex items-center gap-1.5 rounded-none border border-[#352820] bg-[#352820] px-3 py-2 text-xs font-extrabold text-[#f0dc78] hover:bg-[#4b382b] cursor-pointer">
-          <FileText className="w-3.5 h-3.5" /> Ver / descargar
-        </button>
-        <button type="button" onClick={() => handleDecision('approved')} disabled={loading} className="inline-flex items-center gap-1.5 rounded-none bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
-          <CheckCircle className="w-3.5 h-3.5" /> Aprobar Pago
-        </button>
-        <button type="button" onClick={() => handleDecision('rejected')} disabled={loading} className="inline-flex items-center gap-1.5 rounded-none border border-red-300 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 hover:bg-red-100 disabled:opacity-50 cursor-pointer">
-          <XCircle className="w-3.5 h-3.5" /> Rechazar Pago
-        </button>
-      </div>
+      {showRejectForm && (
+        <div className="border border-red-300 bg-red-50 p-3 space-y-2">
+          <label htmlFor={`rejection-reason-${order.id}`} className="block text-xs font-extrabold text-red-900">Motivo que verá el cliente</label>
+          <textarea id={`rejection-reason-${order.id}`} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength="500" rows="3" placeholder="Ej.: El comprobante no permite verificar el importe o la operación." className="w-full resize-y border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500" />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => { setShowRejectForm(false); setRejectionReason(''); }} disabled={loading} className="border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 cursor-pointer">Cancelar</button>
+            <button type="button" onClick={() => handleDecision('rejected')} disabled={loading || rejectionReason.trim().length < 5} className="inline-flex items-center gap-1.5 bg-red-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-800 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"><XCircle className="w-3.5 h-3.5" /> Confirmar rechazo</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

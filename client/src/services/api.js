@@ -270,11 +270,11 @@ export const api = {
     return res.blob();
   },
 
-  approveOrderPayment: async (orderId, decision) => {
+  approveOrderPayment: async (orderId, decision, reason = '') => {
     const res = await fetch(`${API_URL}/admin/orders/${orderId}/approval`, {
       method: 'PATCH',
       headers: authHeaders(),
-      body: JSON.stringify({ decision })
+      body: JSON.stringify({ decision, reason })
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

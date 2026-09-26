@@ -1616,7 +1616,7 @@ app.post('/api/orders/:id/comprobante', requireClient, runReceiptUpload, async (
     }
 
     await dbRun(
-      `UPDATE pedidos SET comprobante_url = ?, estado = 'esperando_aprobacion'
+      `UPDATE pedidos SET comprobante_url = ?, estado = 'esperando_aprobacion', pago_rechazo_motivo = NULL
        WHERE id = ? AND cliente_id = ? AND metodo_pago = 'transferencia'`,
       [newReceiptReference, req.params.id, req.user.id]
     );
@@ -1668,8 +1668,12 @@ app.get('/api/orders/:id/comprobante', requireClient, async (req, res) => {
 app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
   try {
     const decision = req.body?.decision;
+    const rejectionReason = String(req.body?.reason || '').trim();
     if (!['approved', 'rejected'].includes(decision)) {
       return res.status(400).json({ error: 'La decisión debe ser approved o rejected.' });
+    }
+    if (decision === 'rejected' && (rejectionReason.length < 5 || rejectionReason.length > 500)) {
+      return res.status(400).json({ error: 'Indicá un motivo de rechazo de entre 5 y 500 caracteres.' });
     }
     const order = await dbGet(
       'SELECT id, metodo_pago, comprobante_url, estado FROM pedidos WHERE id = ?',
@@ -1680,7 +1684,10 @@ app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'El pedido no tiene un comprobante de transferencia.' });
     }
     const estado = decision === 'approved' ? 'pendiente' : 'pago_rechazado';
-    await dbRun('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, req.params.id]);
+    await dbRun(
+      'UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ?',
+      [estado, decision === 'rejected' ? rejectionReason : null, req.params.id]
+    );
     res.json({ message: decision === 'approved' ? 'Pago aprobado.' : 'Pago rechazado.', estado });
   } catch (error) {
     internalError(res);
@@ -1747,6 +1754,7 @@ const ensureDatabaseSchema = async () => {
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_preference_id VARCHAR(120)');
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_approved_at TIMESTAMPTZ');
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_last_webhook_at TIMESTAMPTZ');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pago_rechazo_motivo TEXT');
     await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS pedidos_mp_payment_id_unique ON pedidos(mp_payment_id) WHERE mp_payment_id IS NOT NULL');
     for (const rules of Object.values(STORE_CONFIG_FIELDS)) {
       await dbRun(

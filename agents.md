@@ -60,7 +60,7 @@ Tablas principales:
 - `categorias`: `id`, `nombre`.
 - `clientes`: `id`, `nombre`, `email`, `password_hash`, `rol`, `fecha_registro`.
 - `productos`: `id`, `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `imagen_url`, `imagenes`, `activo`, `destacado`, `orden`.
-- `pedidos`: `id`, `cliente_id`, `fecha`, `total`, `estado`, `metodo_pago`, `recargo_aplicado`, datos de entrega/envio, metadata Mercado Pago (`mp_payment_id`, `mp_payment_status`, `mp_payment_status_detail`, `mp_merchant_order_id`, `mp_preference_id`, `mp_approved_at`, `mp_last_webhook_at`), `comprobante_url`.
+- `pedidos`: `id`, `cliente_id`, `fecha`, `total`, `estado`, `metodo_pago`, `recargo_aplicado`, datos de entrega/envio, metadata Mercado Pago (`mp_payment_id`, `mp_payment_status`, `mp_payment_status_detail`, `mp_merchant_order_id`, `mp_preference_id`, `mp_approved_at`, `mp_last_webhook_at`), `comprobante_url`, `pago_rechazo_motivo`.
 - `pedido_items`: `id`, `pedido_id`, `producto_id`, `oferta_id`, `cantidad`, `precio_unitario`.
 - `ofertas`: `id`, `nombre`, `producto_ids`, `descuento_o_precio_paquete`, `tipo_descuento`, `prioridad`, `activa`, `desactivada_por_stock`, `producto_sin_stock_id`, `producto_sin_stock_nombre`.
 - `mensajes`: `id`, `pedido_id`, `remitente`, `contenido`, `fecha`, `leido`, `hilo_id`, `tipo`, `cerrado`.
@@ -215,7 +215,7 @@ El panel admin permite:
 - Ajustar stock con botones rapidos `+/-`.
 - Crear, editar, activar/desactivar y eliminar ofertas.
 - Mostrar advertencias de stock irregular para ofertas.
-- Revisar ventas, separar pendientes/resueltas, cambiar estados y aprobar/rechazar comprobantes.
+- Revisar ventas, separar pendientes/resueltas, cambiar estados y aprobar/rechazar comprobantes. Rechazar una transferencia exige un motivo de 5 a 500 caracteres que se muestra al cliente.
 - Ver y responder mensajes por pedido; cerrar hilos de reclamo.
 - Editar datos generales de tienda y datos bancarios desde Configuracion.
 - Editar el contenido del hero desde el propio Home si el usuario es admin.

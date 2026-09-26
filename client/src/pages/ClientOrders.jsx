@@ -288,6 +288,19 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
 
       <OrderStepper status={order.estado} hasReceipt={hasReceipt} />
 
+      {order.estado === 'pago_rechazado' && (
+        <div className="mx-4 mb-4 flex items-start gap-3 border border-red-400 bg-red-50 p-4 text-red-900" role="alert">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-700" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider">Pago rechazado</p>
+            <p className="mt-1 text-xs font-semibold leading-relaxed">
+              {order.pago_rechazo_motivo || 'No pudimos validar el pago. Contactanos si necesitás más información.'}
+            </p>
+            <p className="mt-2 text-[11px] font-bold">Podés corregir el comprobante y volver a enviarlo.</p>
+          </div>
+        </div>
+      )}
+
       {order.metodo_pago === 'transferencia' && (Boolean(order.comprobante_url) || ['esperando_aprobacion', 'pago_rechazado'].includes(order.estado)) && (
         <div className="px-4 pb-4">
           <ReceiptUpload
