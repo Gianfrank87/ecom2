@@ -57,7 +57,14 @@ const STATUS_CONFIG = {
   }
 };
 
-function OrderStepper({ status }) {
+const RECEIPT_REVIEW_STATUS = {
+  label: 'Comprobante en revisión',
+  icon: Clock,
+  classes: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  dot: 'bg-emerald-600'
+};
+
+function OrderStepper({ status, hasReceipt }) {
   const steps = ['Pedido realizado', 'Pago aprobado', 'Enviado', 'Completado'];
   const activeIndex = {
     esperando_aprobacion: 0,
@@ -87,7 +94,13 @@ function OrderStepper({ status }) {
           </React.Fragment>
         ))}
       </div>
-      {status === 'esperando_aprobacion' && <p className="mt-3 text-center text-[11px] font-bold text-amber-900">Subí tu comprobante para que podamos verificar el pago.</p>}
+      {status === 'esperando_aprobacion' && (
+        <p className={`mt-3 text-center text-[11px] font-bold ${hasReceipt ? 'text-emerald-800' : 'text-amber-900'}`}>
+          {hasReceipt
+            ? 'Recibimos tu comprobante correctamente. Lo estamos verificando.'
+            : 'Subí tu comprobante para que podamos verificar el pago.'}
+        </p>
+      )}
       {rejected && <p className="mt-3 text-center text-[11px] font-bold text-red-700">El comprobante fue rechazado. Podés cargar uno nuevo.</p>}
     </div>
   );
@@ -206,7 +219,10 @@ function MessageThread({ order, onClose }) {
 
 function OrderCard({ order, token, onContact, onReceiptUpdated }) {
   const [expanded, setExpanded] = useState(false);
-  const status = STATUS_CONFIG[order.estado] || STATUS_CONFIG.pendiente;
+  const hasReceipt = Boolean(order.comprobante_url);
+  const status = order.estado === 'esperando_aprobacion' && hasReceipt
+    ? RECEIPT_REVIEW_STATUS
+    : STATUS_CONFIG[order.estado] || STATUS_CONFIG.pendiente;
 
   return (
     <div className="bg-white border border-[#352820]/30 rounded-none shadow-sm overflow-hidden transition-all duration-200 text-left">
@@ -255,15 +271,15 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
         </div>
       </div>
 
-      <OrderStepper status={order.estado} />
+      <OrderStepper status={order.estado} hasReceipt={hasReceipt} />
 
       {order.metodo_pago === 'transferencia' && (Boolean(order.comprobante_url) || ['esperando_aprobacion', 'pago_rechazado'].includes(order.estado)) && (
         <div className="px-4 pb-4">
           <ReceiptUpload
             orderId={order.id}
             token={token}
-            hasReceipt={Boolean(order.comprobante_url)}
-            allowUpload={['esperando_aprobacion', 'pago_rechazado'].includes(order.estado)}
+            hasReceipt={hasReceipt}
+            allowUpload={order.estado === 'pago_rechazado' || (order.estado === 'esperando_aprobacion' && !hasReceipt)}
             onUploaded={onReceiptUpdated}
           />
         </div>

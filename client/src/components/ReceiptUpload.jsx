@@ -11,6 +11,8 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
   const [downloading, setDownloading] = useState(false);
   const [uploaded, setUploaded] = useState(false);
   const [error, setError] = useState('');
+  const receiptWasSent = hasReceipt || uploaded;
+  const canUpload = allowUpload && !uploaded;
 
   const handleFileChange = (event) => {
     const nextFile = event.target.files?.[0] || null;
@@ -71,15 +73,17 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
   };
 
   return (
-    <div className="rounded-none border border-amber-200 bg-amber-50/70 p-4 space-y-3">
+    <div className={`rounded-none border p-4 space-y-3 ${receiptWasSent ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70'}`}>
       <div className="flex items-start gap-3">
         <FileUp className="w-5 h-5 shrink-0 text-[#352820] mt-0.5" />
         <div>
           <h3 className="text-sm font-extrabold text-gray-900">Comprobante de transferencia</h3>
-          <p className="text-xs text-gray-600 mt-1">Subí una imagen JPEG/PNG o PDF de hasta 5 MB.</p>
+          <p className="text-xs text-gray-600 mt-1">
+            {receiptWasSent ? 'El archivo fue recibido y está pendiente de revisión.' : 'Subí una imagen JPEG/PNG o PDF de hasta 5 MB.'}
+          </p>
         </div>
       </div>
-      {(hasReceipt || uploaded) && (
+      {receiptWasSent && (
         <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 rounded-none border border-emerald-200 bg-emerald-50 px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
             <CheckCircle2 className="w-4 h-4" /> Comprobante enviado
@@ -89,7 +93,7 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
           </button>
         </div>
       )}
-      {allowUpload && (
+      {canUpload && (
         <form onSubmit={handleUpload} className="space-y-2">
           <input type="file" name="comprobante" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} className="block w-full text-xs text-gray-600 file:mr-3 file:rounded-none file:border-0 file:bg-[#352820] file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#f0dc78] hover:file:bg-[#4b382b]" />
           <button type="submit" disabled={!file || uploading} className="w-full rounded-none bg-[#352820] px-3 py-2.5 text-xs font-black uppercase tracking-wider text-[#f0dc78] hover:bg-[#4b382b] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 cursor-pointer">
