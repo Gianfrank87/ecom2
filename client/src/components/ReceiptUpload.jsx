@@ -5,7 +5,7 @@ import { api } from '../services/api';
 const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-export default function ReceiptUpload({ orderId, token, hasReceipt = false, allowUpload = true, onUploaded }) {
+export default function ReceiptUpload({ orderId, token, hasReceipt = false, allowUpload = true, receiptStatus = 'missing', onUploaded }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -13,6 +13,16 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
   const [error, setError] = useState('');
   const receiptWasSent = hasReceipt || uploaded;
   const canUpload = allowUpload && !uploaded;
+  const effectiveStatus = uploaded ? 'review' : receiptStatus;
+  const statusClasses = {
+    missing: 'border-red-300 bg-red-50/70',
+    rejected: 'border-red-300 bg-red-50/70',
+    review: 'border-amber-300 bg-amber-50/70',
+    approved: 'border-emerald-300 bg-emerald-50/70',
+  }[effectiveStatus] || 'border-gray-200 bg-gray-50';
+  const confirmationClasses = effectiveStatus === 'approved'
+    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+    : 'border-amber-300 bg-amber-50 text-amber-900';
 
   const handleFileChange = (event) => {
     const nextFile = event.target.files?.[0] || null;
@@ -73,20 +83,24 @@ export default function ReceiptUpload({ orderId, token, hasReceipt = false, allo
   };
 
   return (
-    <div className={`rounded-none border p-4 space-y-3 ${receiptWasSent ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70'}`}>
+    <div className={`rounded-none border p-4 space-y-3 ${statusClasses}`}>
       <div className="flex items-start gap-3">
         <FileUp className="w-5 h-5 shrink-0 text-[#352820] mt-0.5" />
         <div>
           <h3 className="text-sm font-extrabold text-gray-900">Comprobante de transferencia</h3>
           <p className="text-xs text-gray-600 mt-1">
-            {receiptWasSent ? 'El archivo fue recibido y está pendiente de revisión.' : 'Subí una imagen JPEG/PNG o PDF de hasta 5 MB.'}
+            {effectiveStatus === 'approved'
+              ? 'El pago fue aprobado correctamente.'
+              : receiptWasSent
+                ? 'El archivo fue recibido y está pendiente de revisión.'
+                : 'Subí una imagen JPEG/PNG o PDF de hasta 5 MB.'}
           </p>
         </div>
       </div>
       {receiptWasSent && (
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 rounded-none border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-            <CheckCircle2 className="w-4 h-4" /> Comprobante enviado
+        <div className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 rounded-none border px-3 py-2 ${confirmationClasses}`}>
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold">
+            <CheckCircle2 className="w-4 h-4" /> {effectiveStatus === 'approved' ? 'Pago aprobado' : 'Comprobante enviado'}
           </span>
           <button type="button" onClick={handleDownload} disabled={downloading} className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#352820] hover:text-[#4b382b] disabled:opacity-50 cursor-pointer" title="Descargar comprobante">
             <Download className="w-4 h-4" /> {downloading ? 'Descargando...' : 'Descargar'}

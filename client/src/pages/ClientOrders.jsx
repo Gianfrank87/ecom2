@@ -32,10 +32,10 @@ const STATUS_CONFIG = {
     dot: 'bg-emerald-600'
   },
   esperando_aprobacion: {
-    label: 'Esperando comprobante',
-    icon: Clock,
-    classes: 'bg-amber-50 text-amber-900 border-amber-300',
-    dot: 'bg-amber-600'
+    label: 'Falta comprobante',
+    icon: AlertCircle,
+    classes: 'bg-red-50 text-red-800 border-red-300',
+    dot: 'bg-red-600'
   },
   pago_rechazado: {
     label: 'Pago rechazado',
@@ -60,6 +60,13 @@ const STATUS_CONFIG = {
 const RECEIPT_REVIEW_STATUS = {
   label: 'Comprobante en revisión',
   icon: Clock,
+  classes: 'bg-amber-50 text-amber-900 border-amber-300',
+  dot: 'bg-amber-500'
+};
+
+const TRANSFER_APPROVED_STATUS = {
+  label: 'Pago aprobado',
+  icon: CheckCircle,
   classes: 'bg-emerald-50 text-emerald-800 border-emerald-300',
   dot: 'bg-emerald-600'
 };
@@ -95,7 +102,7 @@ function OrderStepper({ status, hasReceipt }) {
         ))}
       </div>
       {status === 'esperando_aprobacion' && (
-        <p className={`mt-3 text-center text-[11px] font-bold ${hasReceipt ? 'text-emerald-800' : 'text-amber-900'}`}>
+        <p className={`mt-3 text-center text-[11px] font-bold ${hasReceipt ? 'text-amber-900' : 'text-red-700'}`}>
           {hasReceipt
             ? 'Recibimos tu comprobante correctamente. Lo estamos verificando.'
             : 'Subí tu comprobante para que podamos verificar el pago.'}
@@ -220,9 +227,17 @@ function MessageThread({ order, onClose }) {
 function OrderCard({ order, token, onContact, onReceiptUpdated }) {
   const [expanded, setExpanded] = useState(false);
   const hasReceipt = Boolean(order.comprobante_url);
-  const status = order.estado === 'esperando_aprobacion' && hasReceipt
+  const isTransfer = order.metodo_pago === 'transferencia';
+  const receiptStatus = order.estado === 'pago_rechazado'
+    ? 'rejected'
+    : order.estado === 'esperando_aprobacion'
+      ? hasReceipt ? 'review' : 'missing'
+      : hasReceipt ? 'approved' : null;
+  const status = isTransfer && order.estado === 'esperando_aprobacion' && hasReceipt
     ? RECEIPT_REVIEW_STATUS
-    : STATUS_CONFIG[order.estado] || STATUS_CONFIG.pendiente;
+    : isTransfer && order.estado === 'pendiente' && hasReceipt
+      ? TRANSFER_APPROVED_STATUS
+      : STATUS_CONFIG[order.estado] || STATUS_CONFIG.pendiente;
 
   return (
     <div className="bg-white border border-[#352820]/30 rounded-none shadow-sm overflow-hidden transition-all duration-200 text-left">
@@ -280,6 +295,7 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
             token={token}
             hasReceipt={hasReceipt}
             allowUpload={order.estado === 'pago_rechazado' || (order.estado === 'esperando_aprobacion' && !hasReceipt)}
+            receiptStatus={receiptStatus}
             onUploaded={onReceiptUpdated}
           />
         </div>
