@@ -1161,7 +1161,7 @@ export default function Admin() {
     <div className="min-h-screen bg-[#f7f6f3] text-[#352820]">
       <header className="sticky top-0 z-40 flex h-20 items-center border-b border-gray-200 bg-white px-4 sm:px-7">
         <Link to="/" className="flex items-center gap-3" title="Volver a la tienda">
-          <img src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1788907250/copy_of_0eab9e86-bf10-4de7-8c39-d84f17317403.png" alt="NigDiz" className="h-11 w-11 object-contain" />
+          <img src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1791754595/5a9aa0ff-b70f-4f16-9018-43cca73ae02d_bhvhqh.png" alt="NigDiz" className="h-11 w-11 object-contain" />
           <div className="hidden sm:block">
             <p className="text-xl font-black leading-none tracking-[0.16em] text-black">NIGDIZ</p>
             <p className="mt-1 text-[9px] font-extrabold tracking-[0.38em] text-[#a78665]">ADMIN</p>
