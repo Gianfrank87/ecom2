@@ -1160,12 +1160,8 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-[#f7f6f3] text-[#352820]">
       <header className="sticky top-0 z-40 flex h-20 items-center border-b border-gray-200 bg-white px-4 sm:px-7">
-        <Link to="/" className="flex items-center gap-3" title="Volver a la tienda">
-          <img src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1791754595/5a9aa0ff-b70f-4f16-9018-43cca73ae02d_bhvhqh.png" alt="NigDiz" className="h-11 w-11 object-contain" />
-          <div className="hidden sm:block">
-            <p className="text-xl font-black leading-none tracking-[0.16em] text-black">NIGDIZ</p>
-            <p className="mt-1 text-[9px] font-extrabold tracking-[0.38em] text-[#a78665]">ADMIN</p>
-          </div>
+        <Link to="/" className="flex items-center" title="Volver a la tienda">
+          <img src="https://res.cloudinary.com/dl3t6vykm/image/upload/v1791754595/5a9aa0ff-b70f-4f16-9018-43cca73ae02d_bhvhqh.png" alt="NigDiz Admin" className="h-14 w-auto object-contain" />
         </Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
           <Link to="/" className="hidden items-center gap-2 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 sm:inline-flex"><ExternalLink className="h-4 w-4" /> Ver tienda</Link>
