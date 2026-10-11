@@ -1557,18 +1557,22 @@ app.post('/api/orders', requireClient, async (req, res) => {
       }
 
       const idempotencyKey = crypto.randomUUID();
+      const preferenceBody = {
+        items: preferenceItems,
+        external_reference: String(orderId),
+        back_urls: {
+          success: `${host}/mis-pedidos`,
+          failure: `${host}/cart`,
+          pending: `${host}/cart`
+        },
+        auto_return: 'approved'
+      };
+      if (process.env.MP_NOTIFICATION_URL) {
+        preferenceBody.notification_url = process.env.MP_NOTIFICATION_URL;
+      }
 
       const prefResult = await preference.create({
-        body: {
-          items: preferenceItems,
-          external_reference: String(orderId),
-          back_urls: {
-            success: `${host}/mis-pedidos`,
-            failure: `${host}/cart`,
-            pending: `${host}/cart`
-          },
-          auto_return: 'approved'
-        },
+        body: preferenceBody,
         requestOptions: { idempotencyKey }
       });
 
@@ -1622,6 +1626,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
 // POST /api/webhooks/mercadopago (Public webhook from Mercado Pago)
 app.post('/api/webhooks/mercadopago', async (req, res) => {
   try {
+    const logMpWebhook = (message, details = {}) => console.log(`[MP WEBHOOK] ${message}`, details);
     const secret = process.env.MP_WEBHOOK_SECRET;
     const xSignature = req.headers['x-signature'];
     const xRequestId = req.headers['x-request-id'];
@@ -1654,6 +1659,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     if (!isPaymentEvent || !dataId) {
       return res.status(200).send('OK');
     }
+    logMpWebhook('Notificación recibida', { dataId: String(dataId), type });
 
     if (!mpClient) {
       console.warn('Mercado Pago no esta configurado; no se pudo consultar el pago del webhook.');
@@ -1676,6 +1682,13 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     const merchantOrderId = paymentData.merchant_order_id || paymentData.order?.id || null;
     const preferenceId = paymentData.preference_id || null;
     const approvedAt = paymentData.date_approved || null;
+    logMpWebhook('Pago consultado correctamente', {
+      dataId: String(dataId),
+      paymentId,
+      status: paymentStatus,
+      externalReference: orderId,
+      preferenceId: preferenceId ? String(preferenceId) : null
+    });
 
     await withTransaction(async (transaction) => {
       await releaseExpiredMercadoPagoReservations(transaction);
@@ -1693,6 +1706,12 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         console.warn('Webhook MP recibido para pedido no Mercado Pago:', orderId, 'payment:', paymentId);
         return;
       }
+      logMpWebhook('Pedido asociado encontrado', {
+        orderId,
+        paymentId,
+        estadoAnterior: order.estado,
+        preferenceId: preferenceId ? String(preferenceId) : null
+      });
 
       if (order.mp_payment_id && String(order.mp_payment_id) !== paymentId) {
         console.warn('Pedido con payment_id previo distinto. No se modifica el pedido:', orderId);
@@ -1716,6 +1735,13 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             [paymentStatus === 'cancelled' ? 'El pago fue cancelado en Mercado Pago.' : 'Mercado Pago rechazó el pago.', orderId]
           );
         }
+        logMpWebhook('Pago no aprobado; no se descontó stock', {
+          orderId,
+          paymentId,
+          status: paymentStatus,
+          estadoAnterior: order.estado,
+          estadoFinal: released || order.estado === 'pendiente_pago' ? 'pago_rechazado' : order.estado
+        });
         return;
       }
 
@@ -1741,9 +1767,32 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         ]
       );
 
-      if (paymentStatus !== 'approved') return;
+      if (paymentStatus !== 'approved') {
+        logMpWebhook('Pago no aprobado; no se descontó stock', {
+          orderId,
+          paymentId,
+          status: paymentStatus,
+          estadoAnterior: order.estado,
+          estadoFinal: order.estado
+        });
+        return;
+      }
+      logMpWebhook('Pago aprobado', {
+        orderId,
+        paymentId,
+        status: paymentStatus,
+        estadoAnterior: order.estado
+      });
 
-      if (['aprobado', 'pago_aprobado_sin_stock'].includes(order.estado)) return;
+      if (['aprobado', 'pago_aprobado_sin_stock'].includes(order.estado)) {
+        logMpWebhook('Pedido ya procesado; se evitó un descuento duplicado de stock', {
+          orderId,
+          paymentId,
+          estadoAnterior: order.estado,
+          estadoFinal: order.estado
+        });
+        return;
+      }
 
       const items = await transaction.all(
         'SELECT pi.producto_id, pi.cantidad, pr.nombre AS producto_nombre ' +
@@ -1770,6 +1819,12 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
               "UPDATE pedidos SET estado = 'pago_aprobado_sin_stock', pago_rechazo_motivo = ? WHERE id = ?",
               [`Mercado Pago aprobó el pago, pero venció la reserva y no hay stock suficiente de ${requested.name}. Contactá al cliente para resolverlo.`, orderId]
             );
+            logMpWebhook('Pago aprobado sin stock suficiente; no se descontó stock', {
+              orderId,
+              paymentId,
+              estadoAnterior: order.estado,
+              estadoFinal: 'pago_aprobado_sin_stock'
+            });
             return;
           }
           lockedProducts.push({ product, quantity: requested.quantity });
@@ -1784,11 +1839,21 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             await deactivateOffersForProduct(updatedProduct.id, updatedProduct.nombre, transaction);
           }
         }
+        logMpWebhook('Stock actualizado', {
+          orderId,
+          paymentId,
+          modo: 'descuento_en_webhook'
+        });
       } else {
         await transaction.run(
           'UPDATE pedidos SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL WHERE id = ?',
           [orderId]
         );
+        logMpWebhook('Stock actualizado', {
+          orderId,
+          paymentId,
+          modo: 'reserva_previa_confirmada'
+        });
       }
 
       await transaction.run(
@@ -1801,6 +1866,12 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         'WHERE id = ?',
         [paymentStatus, paymentStatusDetail, approvedAt, orderId]
       );
+      logMpWebhook('Pedido actualizado correctamente', {
+        orderId,
+        paymentId,
+        estadoAnterior: order.estado,
+        estadoFinal: 'aprobado'
+      });
     });
 
     res.status(200).send('OK');

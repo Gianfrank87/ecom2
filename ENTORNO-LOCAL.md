@@ -25,7 +25,19 @@ La instancia de PostgreSQL que ya estaba instalada en Windows no se modifica: se
 
 ## Qué se puede probar
 
-Registro, login, catálogo, edición de productos y stock, carrito, pedidos, comprobantes, mensajes y administración. Para compras locales usar transferencia/efectivo; los datos bancarios son ficticios y **no hay que transferir dinero**. No se cargan credenciales de Mercado Pago en este modo: no permite probar un cobro real. Imágenes externas siguen necesitando Internet.
+Registro, login, catálogo, edición de productos y stock, carrito, pedidos, comprobantes, mensajes y administración. Para compras locales usar transferencia/efectivo; los datos bancarios son ficticios y **no hay que transferir dinero**. Imágenes externas siguen necesitando Internet.
+
+### Mercado Pago en modo prueba
+
+`dev:local` usa siempre la base local, pero puede cargar credenciales de Mercado Pago desde `.env` o `server/.env` si existen. Para probar Checkout Pro sin dinero real, configurar una credencial de prueba:
+
+```env
+MP_ACCESS_TOKEN=APP_USR_...
+MP_WEBHOOK_SECRET=...
+MP_NOTIFICATION_URL=https://tu-url-publica/api/webhooks/mercadopago
+```
+
+`MP_WEBHOOK_SECRET` es opcional en desarrollo; si falta, el backend avisa en consola y omite la validación de firma. `MP_NOTIFICATION_URL` también es opcional: sirve para probar webhooks locales mediante una URL pública de túnel. El modo prueba lo determina Mercado Pago por la credencial usada. Para una prueba completa, iniciar sesión en Mercado Pago con una cuenta compradora de prueba y usar las tarjetas de prueba oficiales. El nombre del titular controla el resultado: `APRO` aprueba, `OTHE` rechaza y `CONT` deja pendiente.
 
 En un teléfono conectado al mismo Wi-Fi, abrir `http://IP-DE-LA-PC:5173` con la web en marcha (Windows debe permitir el puerto 5173). Las peticiones `/api` pasan por Vite al backend de esta PC; el teléfono no necesita conectarse directamente a PostgreSQL.
 

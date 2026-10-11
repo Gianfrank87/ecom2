@@ -128,10 +128,10 @@ console.log('Base LOCAL: 127.0.0.1:55432/nigdiz_local. Accesos en .local/ACCESOS
 if (command === 'setup') process.exit(0);
 
 // Overrides exist only in child processes. Existing .env / hosting secrets stay untouched.
-const serverEnvPath = path.join(root, 'server', '.env');
-let serverEnvVars = {};
-if (fs.existsSync(serverEnvPath)) {
-  const envContent = fs.readFileSync(serverEnvPath, 'utf8');
+const readEnvFile = (envPath) => {
+  const vars = {};
+  if (!fs.existsSync(envPath)) return vars;
+  const envContent = fs.readFileSync(envPath, 'utf8');
   for (const line of envContent.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
@@ -141,10 +141,15 @@ if (fs.existsSync(serverEnvPath)) {
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
         val = val.substring(1, val.length - 1);
       }
-      serverEnvVars[key] = val;
+      vars[key] = val;
     }
   }
-}
+  return vars;
+};
+const serverEnvVars = {
+  ...readEnvFile(path.join(root, '.env')),
+  ...readEnvFile(path.join(root, 'server', '.env')),
+};
 
 const backendEnv = { 
   ...process.env, 
@@ -154,8 +159,8 @@ const backendEnv = {
   JWT_SECRET: settings.jwtSecret, 
   PORT: '5000', 
   CLIENT_URL: 'http://localhost:5173',
-  MP_ACCESS_TOKEN: '', 
-  MP_WEBHOOK_SECRET: '',
+  MP_ACCESS_TOKEN: serverEnvVars.MP_ACCESS_TOKEN || '', 
+  MP_WEBHOOK_SECRET: serverEnvVars.MP_WEBHOOK_SECRET || '',
 };
 const children = [];
 const launch = (args, cwd, env) => {
