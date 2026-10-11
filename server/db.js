@@ -42,11 +42,6 @@ export const dbRun = async (sql, params = []) => {
       lastID = row.id ?? row.lastid ?? row.last_val ?? null;
     }
 
-    if (lastID === null && /^\s*INSERT\b/i.test(sql)) {
-      const sequenceResult = await client.query('SELECT lastval() AS id');
-      lastID = sequenceResult.rows?.[0]?.id ?? null;
-    }
-
     return {
       lastID,
       changes: result.rowCount,

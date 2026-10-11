@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
+import { DEFAULT_STORE_CONFIG, mergeStoreConfig } from '../config/storeDefaults';
 
 const CONTACT_INFO = [
   {
@@ -50,6 +52,31 @@ const CONTACT_INFO = [
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ContactSection() {
   const [form, setForm] = useState({ nombre: '', email: '', telefono: '', mensaje: '' });
+  const [storeConfig, setStoreConfig] = useState(DEFAULT_STORE_CONFIG);
+
+  useEffect(() => {
+    let ignore = false;
+    api.getStoreConfig()
+      .then((config) => {
+        if (!ignore) setStoreConfig(mergeStoreConfig(config));
+      })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, []);
+
+  const contactInfo = CONTACT_INFO.map((item, index) => {
+    const field = ['whatsapp', 'phone', 'contactEmail', 'address'][index];
+    const value = storeConfig[field] || DEFAULT_STORE_CONFIG[field];
+    const digits = String(value || '').replace(/\D/g, '');
+    const href = field === 'whatsapp'
+      ? `https://wa.me/${digits}`
+      : field === 'phone'
+        ? `tel:${digits}`
+        : field === 'contactEmail'
+          ? `mailto:${value}`
+          : `https://maps.google.com/?q=${encodeURIComponent(value)}`;
+    return { ...item, value, href };
+  });
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -87,7 +114,7 @@ export default function ContactSection() {
 
         {/* ── Contact Info Pills ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-10">
-          {CONTACT_INFO.map((item) => (
+          {contactInfo.map((item) => (
             <a
               key={item.label}
               href={item.href}

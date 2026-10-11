@@ -10,8 +10,8 @@ export async function sendWelcomeEmail({ email, name }) {
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
 
-    const storeName = process.env.STORE_NAME || 'Huellitas & Cía';
-    const fromAddress = process.env.SMTP_FROM || `Huellitas & Cía <onboarding@resend.dev>`;
+    const storeName = process.env.STORE_NAME || 'NigDiz';
+    const fromAddress = process.env.SMTP_FROM || `NigDiz <onboarding@resend.dev>`;
 
     if (!pass || pass.includes('tu_api_key_aqui')) {
       console.log('--- [MAILER DEV SIMULATION] ---');

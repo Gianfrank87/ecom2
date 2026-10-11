@@ -1,16 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
-
-const DEFAULT_STORE_CONFIG = {
-  name: 'NigDiz',
-  whatsapp: '+54 9 3446 373972',
-  contactEmail: 'sehola.negocio@gmail.com',
-  instagramUrl: 'https://www.instagram.com/sehola.negocio/',
-  address: 'Rawson 622 - Gualeguaychu, Entre Rios',
-  businessHours: '',
-  footerText: 'Articulos de seguridad para mascotas. Disenados para protegerlos en cada paseo.',
-};
+import { DEFAULT_STORE_CONFIG, mergeStoreConfig } from '../config/storeDefaults';
 
 const buildWhatsappHref = (value) => {
   const digits = String(value || '').replace(/\D/g, '');
@@ -24,12 +15,18 @@ const buildMapsHref = (value) => {
 
 export default function Footer() {
   const [storeConfig, setStoreConfig] = useState(DEFAULT_STORE_CONFIG);
+  const [paymentConfig, setPaymentConfig] = useState({ transferenciaEnabled: true, efectivoEnabled: true, mercadopagoEnabled: true });
 
   useEffect(() => {
     let ignore = false;
     api.getStoreConfig()
       .then((config) => {
-        if (!ignore) setStoreConfig({ ...DEFAULT_STORE_CONFIG, ...config });
+        if (!ignore) setStoreConfig(mergeStoreConfig(config));
+      })
+      .catch(() => {});
+    api.getPaymentConfig()
+      .then((config) => {
+        if (!ignore) setPaymentConfig(config);
       })
       .catch(() => {});
     return () => {
@@ -135,11 +132,9 @@ export default function Footer() {
           <div className="space-y-3">
             <h3 className="font-extrabold text-xs text-[#d3ad2f] uppercase tracking-widest mb-4">Medios de Pago</h3>
             <div className="flex flex-wrap gap-2 text-[10px] font-black">
-              <span className="px-2 py-1 bg-white/10 border border-white/20 text-white/80">VISA</span>
-              <span className="px-2 py-1 bg-white/10 border border-white/20 text-white/80">Mastercard</span>
-              <span className="px-2 py-1 bg-white/10 border border-white/20 text-white/80">Mercado Pago</span>
-              <span className="px-2 py-1 bg-[#d3ad2f]/20 border border-[#d3ad2f]/40 text-[#d3ad2f]">Transferencia</span>
-              <span className="px-2 py-1 bg-white/10 border border-white/20 text-white/80">Efectivo</span>
+              {paymentConfig.mercadopagoEnabled && <span className="px-2 py-1 bg-white/10 border border-white/20 text-white/80">Mercado Pago</span>}
+              {paymentConfig.transferenciaEnabled && <span className="px-2 py-1 bg-[#d3ad2f]/20 border border-[#d3ad2f]/40 text-[#d3ad2f]">Transferencia</span>}
+              {paymentConfig.efectivoEnabled && <span className="px-2 py-1 bg-white/10 border border-white/20 text-white/80">Efectivo</span>}
             </div>
           </div>
         </div>

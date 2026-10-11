@@ -25,6 +25,18 @@ const STATUS_CONFIG = {
     classes: 'bg-amber-50 text-amber-800 border-amber-300',
     dot: 'bg-amber-500'
   },
+  pago_vencido: {
+    label: 'Pago vencido',
+    icon: AlertCircle,
+    classes: 'bg-red-50 text-red-800 border-red-300',
+    dot: 'bg-red-600'
+  },
+  pago_aprobado_sin_stock: {
+    label: 'Pago aprobado · requiere atención',
+    icon: AlertCircle,
+    classes: 'bg-red-50 text-red-800 border-red-300',
+    dot: 'bg-red-600'
+  },
   aprobado: {
     label: 'Pago aprobado',
     icon: CheckCircle,
@@ -76,6 +88,8 @@ function OrderStepper({ status, hasReceipt }) {
   const activeIndex = {
     esperando_aprobacion: 0,
     pendiente_pago: 0,
+    pago_vencido: 0,
+    pago_aprobado_sin_stock: 1,
     pago_rechazado: 0,
     aprobado: 1,
     pendiente: 1,
@@ -287,6 +301,17 @@ function OrderCard({ order, token, onContact, onReceiptUpdated }) {
       </div>
 
       <OrderStepper status={order.estado} hasReceipt={hasReceipt} />
+
+      {['pago_vencido', 'pago_aprobado_sin_stock'].includes(order.estado) && (
+        <div className="mx-4 mb-4 flex items-start gap-3 border border-red-300 bg-red-50 p-4 text-red-900" role="alert">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-700" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider">{order.estado === 'pago_vencido' ? 'Venció el tiempo para pagar' : 'Necesitamos revisar tu pedido'}</p>
+            <p className="mt-1 text-xs font-semibold leading-relaxed">{order.pago_rechazo_motivo}</p>
+            {order.estado === 'pago_vencido' && <Link to="/cart" className="mt-2 inline-block text-xs font-black underline">Volver al carrito para intentarlo de nuevo</Link>}
+          </div>
+        </div>
+      )}
 
       {order.estado === 'pago_rechazado' && (
         <div className="mx-4 mb-4 flex items-start gap-3 border border-red-400 bg-red-50 p-4 text-red-900" role="alert">

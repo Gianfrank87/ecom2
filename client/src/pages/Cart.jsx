@@ -17,9 +17,50 @@ export default function Cart() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [apiError, setApiError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('transferencia');
+  const [paymentConfig, setPaymentConfig] = useState({
+    transferenciaEnabled: true,
+    efectivoEnabled: true,
+    mercadopagoEnabled: true,
+    transferInstructions: 'Realizá la transferencia y subí el comprobante para que podamos verificar el pago.',
+    cashInstructions: 'Abonás en efectivo al recibir o retirar tu pedido.',
+  });
+  const [paymentConfigLoading, setPaymentConfigLoading] = useState(true);
+  const [paymentConfigError, setPaymentConfigError] = useState('');
   const [bankConfig, setBankConfig] = useState(null);
-  const [bankConfigLoading, setBankConfigLoading] = useState(false);
+  const [bankConfigLoading, setBankConfigLoading] = useState(true);
   const [bankConfigError, setBankConfigError] = useState('');
+
+  useEffect(() => {
+    api.getPaymentConfig()
+      .then((config) => setPaymentConfig((current) => ({ ...current, ...config })))
+      .catch((error) => setPaymentConfigError(error.message))
+      .finally(() => setPaymentConfigLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.getBankConfig()
+      .then(setBankConfig)
+      .catch((error) => setBankConfigError(error.message))
+      .finally(() => setBankConfigLoading(false));
+  }, []);
+
+  const paymentOptions = [
+    { id: 'transferencia', title: 'Transferencia', detail: paymentConfig.transferInstructions },
+    { id: 'efectivo', title: 'Efectivo', detail: paymentConfig.cashInstructions },
+    { id: 'mercadopago', title: 'Mercado Pago', detail: 'Pago seguro desde Mercado Pago.' },
+  ].map((method) => ({
+    ...method,
+    available: !paymentConfigLoading && !paymentConfigError && Boolean(paymentConfig[`${method.id}Enabled`]),
+  }));
+
+  useEffect(() => {
+    if (paymentConfigLoading || bankConfigLoading || paymentConfigError) return;
+    const selected = paymentOptions.find((method) => method.id === paymentMethod);
+    if (selected && !selected.available) {
+      const available = paymentOptions.find((method) => method.available);
+      if (available) setPaymentMethod(available.id);
+    }
+  }, [paymentConfig, paymentConfigLoading, paymentConfigError, bankConfig, bankConfigLoading, bankConfigError, paymentMethod]);
 
   // Checkout Form State
   const [formData, setFormData] = useState({
@@ -100,15 +141,6 @@ export default function Cart() {
   }, [clientUser]);
 
   useEffect(() => {
-    if (paymentMethod !== 'transferencia' || bankConfig) return;
-    setBankConfigLoading(true);
-    api.getBankConfig()
-      .then(setBankConfig)
-      .catch((error) => setBankConfigError(error.message))
-      .finally(() => setBankConfigLoading(false));
-  }, [paymentMethod, bankConfig]);
-
-  useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const statusParam = searchParams.get('status') || searchParams.get('collection_status');
     const hasMpParams = searchParams.has('preference_id') || searchParams.has('payment_id') || searchParams.has('collection_id') || searchParams.has('merchant_order_id');
@@ -162,6 +194,8 @@ export default function Cart() {
 
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
+    const selectedPaymentOption = paymentOptions.find((method) => method.id === paymentMethod);
+    if (!selectedPaymentOption?.available) return;
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -267,6 +301,7 @@ export default function Cart() {
             <div className="space-y-4 text-left">
               <div className="rounded-xl border border-[#0f172a]/15 bg-slate-50 p-4 space-y-2">
                 <h2 className="text-sm font-extrabold text-[#0f172a]">Datos para transferir</h2>
+                <p className="text-xs text-gray-600">{paymentConfig.transferInstructions}</p>
                 {bankConfigLoading && <p className="text-xs text-gray-500">Cargando datos bancarios...</p>}
                 {bankConfigError && <p className="text-xs font-bold text-red-700">{bankConfigError}</p>}
                 {bankConfig && (
@@ -280,6 +315,7 @@ export default function Cart() {
               <ReceiptUpload orderId={simulatedOrderNumber} token={clientToken} />
             </div>
           )}
+          {paymentMethod === 'efectivo' && <p className="border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">{paymentConfig.cashInstructions}</p>}
 
           <div className="pt-4 flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -560,36 +596,38 @@ export default function Cart() {
 
           <fieldset className="space-y-3 border-t border-gray-200 pt-4">
             <legend className="font-extrabold text-sm text-gray-900">Método de pago</legend>
-            <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 cursor-pointer">
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="transferencia"
-                checked={paymentMethod === 'transferencia'}
-                onChange={(event) => setPaymentMethod(event.target.value)}
-                className="mt-1 accent-[#e52521]"
-              />
-              <span>
-                <span className="block text-xs font-extrabold text-gray-900">Transferencia / Efectivo</span>
-                <span className="block text-[11px] text-gray-500">Precio de lista</span>
-              </span>
-            </label>
-            <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 cursor-pointer">
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="mercadopago"
-                checked={paymentMethod === 'mercadopago'}
-                onChange={(event) => setPaymentMethod(event.target.value)}
-                className="mt-1 accent-[#e52521]"
-              />
-              <span>
-                <span className="block text-xs font-extrabold text-gray-900">MercadoPago</span>
-                <span className="block text-[11px] text-gray-500">Disponibilidad inmediata, costo absorbido</span>
-              </span>
-            </label>
+            {paymentOptions.map((method) => (
+              <label
+                key={method.id}
+                aria-disabled={!method.available}
+                className={`group relative flex items-start gap-3 rounded-lg border p-3 ${!method.available ? 'cursor-default border-gray-200 bg-gray-100 opacity-55' : 'cursor-pointer border-gray-200 bg-gray-50 hover:border-[#d3ad2f]'}`}
+              >
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value={method.id}
+                  checked={paymentMethod === method.id}
+                  disabled={!method.available}
+                  onChange={(event) => setPaymentMethod(event.target.value)}
+                  className="mt-1 accent-[#d3ad2f]"
+                />
+                <span>
+                  <span className="block text-xs font-extrabold text-gray-900">{method.title}</span>
+                  {method.available && <span className="block text-[11px] text-gray-500">{method.detail}</span>}
+                </span>
+                {!method.available && (
+                  <span role="tooltip" className="pointer-events-none absolute bottom-full left-3 z-20 mb-2 rounded-md bg-[#352820] px-3 py-2 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Este método no está disponible momentáneamente.
+                    <span className="absolute left-5 top-full h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-[#352820]" />
+                  </span>
+                )}
+              </label>
+            ))}
             {paymentMethod === 'mercadopago' && (
-              <p className="text-[11px] font-semibold text-gray-500">Incluye recargo del 7,06% por costos de plataforma.</p>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-gray-500">Incluye un recargo del {((1 / 0.934 - 1) * 100).toFixed(2).replace('.', ',')}% por costos de plataforma.</p>
+                <p className="text-[11px] font-semibold text-amber-900">Al iniciar el pago, reservamos los productos de tu pedido durante 30 minutos.</p>
+              </div>
             )}
           </fieldset>
 
@@ -716,7 +754,7 @@ export default function Cart() {
                 </button>
                 <button
                   type="submit"
-                  disabled={checkoutLoading || isRedirecting}
+                  disabled={checkoutLoading || isRedirecting || !paymentOptions.find((method) => method.id === paymentMethod)?.available}
                   className="w-2/3 py-3 rounded-lg bg-[#352820] hover:bg-[#4b382b] disabled:bg-gray-300 text-[#f0dc78] font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
                 >
                   {isRedirecting ? 'Redirigiendo a Mercado Pago...' : checkoutLoading ? 'Procesando...' : 'Finalizar Compra'}

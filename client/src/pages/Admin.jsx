@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Link, useLocation } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { api } from '../services/api';
+import { DEFAULT_STORE_CONFIG, mergeStoreConfig } from '../config/storeDefaults';
 
 const formatPrice = (value) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value ?? 0);
@@ -552,6 +553,7 @@ function BankConfigForm({ showFeedback }) {
     setSaving(true);
     try {
       await api.updateBankConfig(form);
+      window.dispatchEvent(new Event('bank-config-updated'));
       showFeedback('Datos bancarios guardados.');
     } catch (error) {
       showFeedback(error.message, 'error');
@@ -565,9 +567,10 @@ function BankConfigForm({ showFeedback }) {
   return (
     <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
       <p className="text-xs text-gray-500 font-semibold">Estos datos se mostrarán a los clientes que elijan transferencia.</p>
+      <p className="text-[11px] text-gray-500">Ingresá el titular y al menos un destino válido: alias de 6 a 20 caracteres (letras, números y puntos) o CBU de 22 dígitos. Si completás ambos, los dos deben tener formato válido.</p>
       {error && <p className="text-xs font-bold text-red-700">{error}</p>}
       {[
-        ['alias', 'Alias bancario', 'Ej: huellitas.cia'],
+        ['alias', 'Alias bancario', 'Ej: tienda.alias'],
         ['cbu', 'CBU', 'Ej: 0000000000000000000000'],
         ['titular', 'Titular', 'Nombre del titular de la cuenta']
       ].map(([name, label, placeholder]) => (
@@ -591,23 +594,108 @@ function BankConfigForm({ showFeedback }) {
   );
 }
 
+const DEFAULT_PAYMENT_CONFIG = {
+  transferenciaEnabled: true,
+  efectivoEnabled: true,
+  mercadopagoEnabled: true,
+  transferInstructions: 'Realizá la transferencia y subí el comprobante para que podamos verificar el pago.',
+  cashInstructions: 'Abonás en efectivo al recibir o retirar tu pedido.',
+};
+
+function PaymentConfigForm({ showFeedback }) {
+  const [form, setForm] = useState(DEFAULT_PAYMENT_CONFIG);
+  const [readiness, setReadiness] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const refresh = () => api.getAdminPaymentConfig()
+      .then((config) => {
+        const nextForm = { ...DEFAULT_PAYMENT_CONFIG, ...config };
+        const nextReadiness = config.readiness || {};
+        const methodFields = [
+          ['transferenciaEnabled', 'transferencia'],
+          ['efectivoEnabled', 'efectivo'],
+          ['mercadopagoEnabled', 'mercadopago'],
+        ];
+        methodFields.forEach(([field, method]) => {
+          if (!nextReadiness[method]?.available) nextForm[field] = false;
+        });
+        setForm(nextForm);
+        setReadiness(nextReadiness);
+      })
+      .catch((error) => showFeedback(error.message, 'error'))
+      .finally(() => setLoading(false));
+
+    refresh();
+    window.addEventListener('bank-config-updated', refresh);
+    return () => window.removeEventListener('bank-config-updated', refresh);
+  }, []);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const saved = await api.updatePaymentConfig(form);
+      setForm({ ...DEFAULT_PAYMENT_CONFIG, ...saved });
+      showFeedback('Medios de pago guardados.');
+    } catch (error) {
+      showFeedback(error.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Cargando medios de pago...</p>;
+
+  const methods = [
+    ['transferenciaEnabled', 'Transferencia', 'transferencia'],
+    ['efectivoEnabled', 'Efectivo', 'efectivo'],
+    ['mercadopagoEnabled', 'Mercado Pago', 'mercadopago'],
+  ];
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4">
+      <p className="text-xs font-semibold text-gray-500">Solo podés habilitar medios que tengan su configuración completa. Los motivos y pasos para corregirlos se muestran acá, dentro del panel.</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {methods.map(([field, label, method]) => {
+          const status = readiness[method] || { available: true, reason: '' };
+          const cannotEnable = !status.available && !form[field];
+          return (
+            <div key={field} className="border border-gray-200 bg-gray-50 p-3">
+              <label className={`flex items-center gap-2 text-xs font-bold text-gray-800 ${cannotEnable ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                <input type="checkbox" checked={form[field]} disabled={saving || cannotEnable} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.checked }))} className="accent-[#d3ad2f]" />
+                {label}
+              </label>
+              {!status.available && <p className="mt-2 text-[11px] font-semibold text-amber-900">{status.reason} {!form[field] && 'Corregí esto para poder habilitarlo.'}</p>}
+            </div>
+          );
+        })}
+      </div>
+      <div>
+        <label htmlFor="payment-transfer-instructions" className="label-xs">Instrucciones para transferencia</label>
+        <textarea id="payment-transfer-instructions" value={form.transferInstructions} onChange={(event) => setForm((current) => ({ ...current, transferInstructions: event.target.value }))} maxLength={500} rows={3} className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#352820]" />
+      </div>
+      <div>
+        <label htmlFor="payment-cash-instructions" className="label-xs">Instrucciones para efectivo</label>
+        <textarea id="payment-cash-instructions" value={form.cashInstructions} onChange={(event) => setForm((current) => ({ ...current, cashInstructions: event.target.value }))} maxLength={500} rows={2} className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#352820]" />
+      </div>
+      <button type="submit" disabled={saving} className="inline-flex items-center gap-2 bg-[#352820] px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-[#f0dc78] hover:bg-[#4b382b] disabled:opacity-50 cursor-pointer">
+        {saving ? 'Guardando...' : 'Guardar medios de pago'}
+      </button>
+    </form>
+  );
+}
+
 function StoreConfigForm({ showFeedback }) {
-  const [form, setForm] = useState({
-    name: 'NigDiz',
-    whatsapp: '',
-    contactEmail: '',
-    instagramUrl: '',
-    address: '',
-    businessHours: '',
-    footerText: ''
-  });
+  const [form, setForm] = useState(DEFAULT_STORE_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     api.getStoreConfig()
-      .then((config) => setForm((current) => ({ ...current, ...config })))
+      .then((config) => setForm(mergeStoreConfig(config)))
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
   }, []);
@@ -618,7 +706,7 @@ function StoreConfigForm({ showFeedback }) {
     setSaving(true);
     try {
       const saved = await api.updateStoreConfig(form);
-      setForm(saved);
+      setForm(mergeStoreConfig(saved));
       showFeedback('Datos generales guardados.');
     } catch (error) {
       showFeedback(error.message, 'error');
@@ -631,10 +719,10 @@ function StoreConfigForm({ showFeedback }) {
 
   const fields = [
     ['name', 'Nombre visible', 'NigDiz', 80],
-    ['whatsapp', 'WhatsApp', 'Ej: +54 9 3446 000000', 40],
-    ['contactEmail', 'Email de contacto', 'hola@nigdiz.com', 255],
-    ['instagramUrl', 'Instagram', 'https://instagram.com/nigdiz', 240],
-    ['address', 'Direccion / localidad', 'Gualeguaychu, Entre Rios', 180],
+    ['whatsapp', 'WhatsApp', DEFAULT_STORE_CONFIG.whatsapp, 40],
+    ['contactEmail', 'Email de contacto', DEFAULT_STORE_CONFIG.contactEmail, 255],
+    ['instagramUrl', 'Instagram', DEFAULT_STORE_CONFIG.instagramUrl, 240],
+    ['address', 'Direccion / localidad', DEFAULT_STORE_CONFIG.address, 180],
     ['businessHours', 'Horarios de atencion', 'Lunes a viernes de 9 a 18 hs', 180],
   ];
 
@@ -1564,8 +1652,8 @@ export default function Admin() {
                     <tbody className="divide-y divide-gray-200">
                       {filteredOrders.map((order) => {
                         const firstItem = order.items?.[0];
-                        const statusLabel = { pendiente: 'En preparación', pendiente_pago: 'Pendiente de pago', esperando_aprobacion: 'Pago a revisar', aprobado: 'Pago aprobado', pago_rechazado: 'Pago rechazado', enviado: 'Enviado', completado: 'Completado' }[order.estado] || order.estado;
-                        const statusClass = order.estado === 'pago_rechazado' ? 'bg-red-100 text-red-800' : ['enviado', 'completado'].includes(order.estado) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900';
+                        const statusLabel = { pendiente: 'En preparación', pendiente_pago: 'Pendiente de pago', esperando_aprobacion: 'Pago a revisar', aprobado: 'Pago aprobado', pago_rechazado: 'Pago rechazado', pago_vencido: 'Pago vencido', pago_aprobado_sin_stock: 'Pago aprobado · revisar stock', enviado: 'Enviado', completado: 'Completado' }[order.estado] || order.estado;
+                        const statusClass = ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock'].includes(order.estado) ? 'bg-red-100 text-red-800' : ['enviado', 'completado'].includes(order.estado) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900';
                         const expanded = expandedOrderId === order.id;
                         return (
                           <React.Fragment key={order.id}>
@@ -1577,11 +1665,11 @@ export default function Admin() {
                               <td className="px-5 py-4"><span className={`inline-flex px-3 py-2 text-xs font-extrabold ${statusClass}`}>{statusLabel}</span></td>
                               <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} aria-expanded={expanded} className="inline-flex items-center gap-2 bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] transition-all duration-300 hover:bg-[#c39e22] hover:shadow-sm cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}<ArrowDown className={`h-3.5 w-3.5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} /></button></td>
                             </tr>
-                            <tr><td colSpan="6" className="bg-[#faf8f3] p-0"><div className={`grid transition-[grid-template-rows,opacity] duration-500 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}><div className="overflow-hidden"><div className="grid gap-5 px-5 py-5 lg:grid-cols-3">
+                            <tr><td colSpan="6" className="bg-[#faf8f3] p-0"><div className={`grid transition-[grid-template-rows,opacity] duration-500 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}><div className="overflow-hidden">{order.estado === 'pago_aprobado_sin_stock' && <p className="mx-5 mt-5 border border-red-300 bg-red-50 p-3 text-xs font-bold text-red-900">{order.pago_rechazo_motivo}</p>}<div className="grid gap-5 px-5 py-5 lg:grid-cols-3">
                                 {pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) && <div className="lg:col-span-3"><ReceiptReviewCard order={order} onFeedback={showFeedback} onUpdated={refreshOrders} compact /></div>}
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Entrega</p><div className="space-y-1 text-xs font-semibold text-gray-700">{order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}{order.entrega_telefono && <p><strong>Teléfono:</strong> {order.entrega_telefono}</p>}{order.entrega_direccion && <p><strong>Dirección:</strong> {order.entrega_direccion}</p>}{order.envio_localidad && <p><strong>Destino:</strong> {order.envio_localidad}, {order.envio_provincia}</p>}</div></div>
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex justify-between gap-3 text-xs"><span className="font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
-                                <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
+                                <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="pago_vencido">Pago vencido</option><option value="pago_aprobado_sin_stock">Pago aprobado · falta stock</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
                               </div></div></div></td></tr>
                           </React.Fragment>
                         );
@@ -1666,6 +1754,8 @@ export default function Admin() {
                         <option value="esperando_aprobacion">Comprobante pendiente de aprobación</option>
                         <option value="aprobado">Pago Aprobado (MP)</option>
                         <option value="pago_rechazado">Pago rechazado</option>
+                        <option value="pago_vencido">Pago vencido</option>
+                        <option value="pago_aprobado_sin_stock">Pago aprobado · falta stock</option>
                         <option value="enviado">Enviado</option>
                         <option value="completado">Completado</option>
                       </select>
@@ -1717,6 +1807,10 @@ export default function Admin() {
 
       {activeTab === 'config' && (
         <div className="space-y-4 text-left">
+          <div className="bg-white border border-gray-200 rounded-none p-6 shadow-xs">
+            <h2 className="font-extrabold text-base text-gray-900 mb-1">Medios de pago</h2>
+            <PaymentConfigForm showFeedback={showFeedback} />
+          </div>
           <div className="bg-white border border-gray-200 rounded-none p-6 shadow-xs">
             <h2 className="font-extrabold text-base text-gray-900 mb-1">Datos generales</h2>
             <StoreConfigForm showFeedback={showFeedback} />

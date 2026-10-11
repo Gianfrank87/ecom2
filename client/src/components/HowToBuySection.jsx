@@ -50,7 +50,7 @@ export default function HowToBuySection() {
     {
       number: '06',
       title: 'Medio de pago',
-      description: 'Elegí tu medio de pago preferido (Mercado Pago, Transferencia con 10% OFF o Efectivo).',
+      description: 'Elegí uno de los medios de pago habilitados en el checkout y seguí las instrucciones para completar el pago.',
       icon: CreditCard
     },
     {

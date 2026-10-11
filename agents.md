@@ -1,6 +1,6 @@
 # AGENTS.md - Estado actual del proyecto NigDiz
 
-Ultima actualizacion: 2026-09-26.
+Ultima actualizacion: 2026-09-27.
 
 NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + PostgreSQL. La marca visible es NigDiz, aunque todavia quedan nombres historicos internos como `huellitas_*`, `huellitas-server` y algunos textos heredados en codigo o localStorage.
 
@@ -140,6 +140,8 @@ Configuracion y contenido:
 
 - `GET /api/config/banco`: publico.
 - `PUT /api/admin/config/banco`: admin.
+- `GET /api/config/payment-methods`: publico, devuelve medios activos e instrucciones de pago.
+- `PUT /api/admin/config/payment-methods`: admin, edita disponibilidad de transferencia, efectivo y Mercado Pago, y sus instrucciones.
 - `GET /api/config/store`: publico, datos generales de tienda.
 - `PUT /api/admin/config/store`: admin, edita datos generales de tienda.
 - `GET /api/content/:key`: publico, solo claves permitidas. Actualmente `home-hero`.
@@ -165,12 +167,14 @@ La cotizacion de envio es un simulador en `server/services/shippingService.js`, 
   - El stock se descuenta en la transaccion de creacion.
 - Para Mercado Pago:
   - El pedido nace en `pendiente_pago`.
-  - Se valida stock al crear el pedido, pero no se descuenta hasta webhook aprobado.
+  - El backend descuenta y reserva el stock al iniciar el checkout y libera la reserva al vencer, rechazarse o cancelarse el pago.
+  - La reserva de Mercado Pago vence a los 30 minutos; se libera mediante una tarea periódica y también antes de procesar nuevas compras.
+  - Si el pago se aprueba luego del vencimiento, el backend vuelve a intentar reservar stock de forma atómica; si ya no alcanza, marca `pago_aprobado_sin_stock` para revisión manual.
   - Se genera una preferencia con `external_reference = orderId`.
   - El recargo se calcula con factor neto `0.934`.
   - Guarda metadata operativa del pago: `mp_payment_id`, estado, detalle, merchant order, preference id, fecha de aprobacion y ultimo webhook.
-  - El webhook aprobado descuenta stock de forma idempotente y pasa el pedido a `aprobado`.
-  - Si Mercado Pago informa `rejected` o `cancelled` mientras el pedido sigue en `pendiente_pago`, se marca como `pago_rechazado`.
+  - El webhook aprobado confirma la reserva existente o vuelve a tomar el stock de forma idempotente y pasa el pedido a `aprobado`.
+  - Si Mercado Pago informa `rejected` o `cancelled`, se libera la reserva y se marca como `pago_rechazado`.
 
 El frontend conserva el carrito al redirigir a Mercado Pago. Si el pago falla o queda pendiente y vuelve a `/cart`, permite reintentar. Si vuelve aprobado a `/mis-pedidos`, limpia el carrito.
 
@@ -218,6 +222,7 @@ El panel admin permite:
 - Revisar ventas, separar pendientes/resueltas, cambiar estados y aprobar/rechazar comprobantes. Rechazar una transferencia exige un motivo de 5 a 500 caracteres que se muestra al cliente.
 - Ver y responder mensajes por pedido; cerrar hilos de reclamo.
 - Editar datos generales de tienda y datos bancarios desde Configuracion.
+- Configurar medios de pago disponibles e instrucciones editables para transferencia y efectivo; el checkout y backend respetan las opciones activas.
 - Editar el contenido del hero desde el propio Home si el usuario es admin.
 
 ## Diseno visual
@@ -265,13 +270,15 @@ Hay textos internos heredados de Huellitas en el template. Revisar antes de acti
 - [x] Crear en Supabase el bucket privado `comprobantes`, con limite de 5 MB y MIME JPEG, PNG y PDF.
 - [x] Configurar en Render `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (o `SUPABASE_SECRET_KEY`) y `SUPABASE_RECEIPTS_BUCKET=comprobantes`.
 - [x] Desplegar el backend con la integracion y verificar que la API nueva responde en produccion.
-- [ ] Probar una carga, descarga y reemplazo reales. En produccion no existe fallback al disco volatil.
+- [x] Verificar una carga real en produccion y confirmar al dia siguiente que el comprobante persiste en Supabase y sigue disponible en el panel admin para revision.
 
 ### 2. Configuracion general
 
 - [x] Conectar los datos generales de tienda al Footer.
-- [ ] Conectar `GET /api/config/store` a ContactSection y templates de email.
-- [ ] Hacer editables los metodos de pago visibles, instrucciones de transferencia y textos de estados de pago.
+- [x] Conectar `GET /api/config/store` a ContactSection y unificar los valores iniciales de WhatsApp, email, Instagram y direccion con los datos correctos de la seccion Contacto. El nombre del remitente del email ya usa NigDiz como valor predeterminado.
+- [ ] Incorporar los datos editables de tienda en el contenido de los emails.
+- [x] Hacer editables los medios de pago visibles y las instrucciones de transferencia/efectivo; el checkout y Footer reflejan los medios activos y el backend impide crear pedidos con un método deshabilitado.
+- [ ] Hacer editables los textos de estados de pago.
 
 ### 3. Contenido administrable
 
@@ -279,6 +286,8 @@ Hay textos internos heredados de Huellitas en el template. Revisar antes de acti
 
 ### 4. Mercado Pago en produccion
 
+- [x] Reservar stock al iniciar un checkout de Mercado Pago por 30 minutos y liberarlo ante vencimiento, rechazo o cancelacion.
+- [ ] Probar en local la reserva concurrente, la liberacion por vencimiento y el caso de pago aprobado despues de vencer.
 - [ ] Configurar el webhook real en el dashboard de Mercado Pago apuntando a `/api/webhooks/mercadopago`.
 - [ ] Confirmar `MP_WEBHOOK_SECRET` en Render y ejecutar una compra real controlada.
 - [ ] Verificar cambio de estado, metadata e impacto de stock despues del pago.

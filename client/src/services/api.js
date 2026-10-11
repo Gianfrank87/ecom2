@@ -151,6 +151,33 @@ export const api = {
     return res.json();
   },
 
+  getPaymentConfig: async () => {
+    const res = await fetch(`${API_URL}/config/payment-methods`);
+    if (!res.ok) throw new Error('Error al obtener los medios de pago');
+    return res.json();
+  },
+
+  getAdminPaymentConfig: async () => {
+    const res = await fetch(`${API_URL}/admin/config/payment-methods`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error('Error al obtener la configuración de medios de pago');
+    return res.json();
+  },
+
+  updatePaymentConfig: async (config) => {
+    const res = await fetch(`${API_URL}/admin/config/payment-methods`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al guardar los medios de pago');
+    }
+    return res.json();
+  },
+
   // ─── Client Auth ───
   getStoreConfig: async () => {
     const res = await fetch(`${API_URL}/config/store`);

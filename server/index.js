@@ -40,14 +40,29 @@ if (MP_ACCESS_TOKEN) {
   mpClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
 }
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
-const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado']);
+const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'enviado', 'completado', 'pendiente_pago', 'aprobado']);
+const MP_STOCK_RESERVATION_MINUTES = 30;
 const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
+const DEFAULT_PAYMENT_CONFIG = {
+  transferenciaEnabled: true,
+  efectivoEnabled: true,
+  mercadopagoEnabled: true,
+  transferInstructions: 'Realizá la transferencia y subí el comprobante para que podamos verificar el pago.',
+  cashInstructions: 'Abonás en efectivo al recibir o retirar tu pedido.',
+};
+const PAYMENT_CONFIG_KEYS = {
+  transferenciaEnabled: 'pago_transferencia_habilitado',
+  efectivoEnabled: 'pago_efectivo_habilitado',
+  mercadopagoEnabled: 'pago_mercadopago_habilitado',
+  transferInstructions: 'pago_transferencia_instrucciones',
+  cashInstructions: 'pago_efectivo_instrucciones',
+};
 const STORE_CONFIG_FIELDS = {
   name: { key: 'tienda_nombre', defaultValue: 'NigDiz', maxLength: 80, required: true },
-  whatsapp: { key: 'tienda_whatsapp', defaultValue: '', maxLength: 40 },
-  contactEmail: { key: 'tienda_email_contacto', defaultValue: '', maxLength: 255, type: 'email' },
-  instagramUrl: { key: 'tienda_instagram_url', defaultValue: '', maxLength: 240, type: 'url' },
-  address: { key: 'tienda_direccion', defaultValue: 'Gualeguaychu, Entre Rios', maxLength: 180 },
+  whatsapp: { key: 'tienda_whatsapp', defaultValue: '+54 9 3446 373972', maxLength: 40 },
+  contactEmail: { key: 'tienda_email_contacto', defaultValue: 'sehola.negocio@gmail.com', maxLength: 255, type: 'email' },
+  instagramUrl: { key: 'tienda_instagram_url', defaultValue: 'https://www.instagram.com/sehola.negocio/', maxLength: 240, type: 'url' },
+  address: { key: 'tienda_direccion', defaultValue: 'Rawson 622 · Gualeguaychú, Entre Ríos', maxLength: 180 },
   businessHours: { key: 'tienda_horarios', defaultValue: '', maxLength: 180 },
   footerText: { key: 'tienda_footer_texto', defaultValue: 'Productos pensados para la seguridad, comodidad y felicidad de tus mascotas.', maxLength: 240 },
 };
@@ -173,6 +188,122 @@ const getBankConfig = async (query = { all: dbAll }) => {
   return { alias: values.banco_alias || '', cbu: values.banco_cbu || '', titular: values.banco_titular || '' };
 };
 
+const getTransferConfigIssue = (bankConfig) => {
+  const holder = String(bankConfig.titular || '').trim();
+  const alias = String(bankConfig.alias || '').trim();
+  const cbu = String(bankConfig.cbu || '').trim();
+  const aliasValid = /^[a-z0-9]+(?:\.[a-z0-9]+){1,5}$/i.test(alias) && alias.length >= 6 && alias.length <= 20;
+  const cbuValid = /^\d{22}$/.test(cbu);
+  if (!holder) return 'Falta configurar el titular de la cuenta en Datos bancarios.';
+  if (alias && !aliasValid) return 'El alias debe tener entre 6 y 20 letras o números separados por puntos.';
+  if (cbu && !cbuValid) return 'El CBU debe contener exactamente 22 dígitos.';
+  if (!aliasValid && !cbuValid) return 'Cargá un alias válido o un CBU de 22 dígitos en Datos bancarios.';
+  return '';
+};
+
+const getPaymentReadiness = async () => {
+  const bankConfig = await getBankConfig();
+  const transferIssue = getTransferConfigIssue(bankConfig);
+  const mercadopagoIssue = MP_ACCESS_TOKEN ? '' : 'Falta configurar MP_ACCESS_TOKEN en el entorno del servidor.';
+  return {
+    transferencia: { available: !transferIssue, reason: transferIssue },
+    efectivo: { available: true, reason: '' },
+    mercadopago: { available: !mercadopagoIssue, reason: mercadopagoIssue },
+  };
+};
+
+const getPaymentConfig = async (query = { all: dbAll }) => {
+  const keys = Object.values(PAYMENT_CONFIG_KEYS);
+  const rows = await query.all(
+    `SELECT clave, valor FROM configuraciones WHERE clave IN (${keys.map(() => '?').join(', ')})`,
+    keys,
+  );
+  const values = Object.fromEntries(rows.map(({ clave, valor }) => [clave, valor]));
+  return Object.fromEntries(Object.entries(PAYMENT_CONFIG_KEYS).map(([field, key]) => {
+    const value = values[key];
+    if (field.endsWith('Enabled')) {
+      const enabled = value === undefined ? DEFAULT_PAYMENT_CONFIG[field] : value === 'true';
+      return [field, enabled];
+    }
+    return [field, value || DEFAULT_PAYMENT_CONFIG[field]];
+  }));
+};
+
+const restoreOrderStock = async (orderId, transaction) => {
+  const items = await transaction.all(
+    'SELECT producto_id, SUM(cantidad)::INTEGER AS cantidad FROM pedido_items WHERE pedido_id = ? GROUP BY producto_id ORDER BY producto_id',
+    [orderId]
+  );
+  for (const item of items) {
+    await transaction.run('UPDATE productos SET stock = stock + ? WHERE id = ?', [item.cantidad, item.producto_id]);
+  }
+
+  const stockDisabledOffers = await transaction.all(
+    'SELECT id, producto_ids FROM ofertas WHERE activa = FALSE AND desactivada_por_stock = TRUE'
+  );
+  for (const offer of stockDisabledOffers) {
+    let productIds;
+    try { productIds = JSON.parse(offer.producto_ids || '[]').map(String); } catch { continue; }
+    if (!productIds.length) continue;
+    const availableProducts = await transaction.all(
+      'SELECT id FROM productos WHERE id = ANY(?::bigint[]) AND activo = TRUE AND stock > 0',
+      [productIds]
+    );
+    if (availableProducts.length === productIds.length) {
+      await transaction.run(
+        'UPDATE ofertas SET activa = TRUE, desactivada_por_stock = FALSE, producto_sin_stock_id = NULL, producto_sin_stock_nombre = NULL WHERE id = ?',
+        [offer.id]
+      );
+    }
+  }
+};
+
+const releaseExpiredMercadoPagoReservations = async (transaction) => {
+  const expired = await transaction.all(
+    `UPDATE pedidos
+     SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL,
+         estado = 'pago_vencido',
+         pago_rechazo_motivo = 'El plazo de 30 minutos para completar el pago venció. Podés iniciar una nueva compra.'
+     WHERE metodo_pago = 'mercadopago' AND estado = 'pendiente_pago'
+       AND stock_reservado_mp = TRUE AND reserva_stock_expira_at <= CURRENT_TIMESTAMP
+     RETURNING id`
+  );
+  for (const order of expired) await restoreOrderStock(order.id, transaction);
+  return expired.length;
+};
+
+const releaseMercadoPagoReservation = async (orderId, transaction, { status = 'pago_rechazado', reason = null } = {}) => {
+  const released = await transaction.get(
+    `UPDATE pedidos SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL,
+       estado = ?, pago_rechazo_motivo = ?
+     WHERE id = ? AND metodo_pago = 'mercadopago' AND stock_reservado_mp = TRUE
+     RETURNING id`,
+    [status, reason, orderId]
+  );
+  if (!released) return false;
+  await restoreOrderStock(orderId, transaction);
+  return true;
+};
+
+const normalizePaymentConfig = (input = {}) => {
+  const config = {};
+  for (const field of Object.keys(PAYMENT_CONFIG_KEYS)) {
+    if (field.endsWith('Enabled')) {
+      config[field] = input[field] === undefined ? DEFAULT_PAYMENT_CONFIG[field] : input[field] === true;
+    } else {
+      const value = String(input[field] ?? DEFAULT_PAYMENT_CONFIG[field]).trim();
+      if (!value || value.length > 500) {
+        throw Object.assign(new Error('Las instrucciones de pago deben tener entre 1 y 500 caracteres.'), { status: 400 });
+      }
+      config[field] = value;
+    }
+  }
+  if (!config.transferenciaEnabled && !config.efectivoEnabled && !config.mercadopagoEnabled) {
+    throw Object.assign(new Error('Debe quedar al menos un medio de pago habilitado.'), { status: 400 });
+  }
+  return config;
+};
+
 const normalizeStoreConfig = (value = {}) => {
   const nextConfig = {};
   for (const [field, rules] of Object.entries(STORE_CONFIG_FIELDS)) {
@@ -207,7 +338,7 @@ const getStoreConfig = async (query = { all: dbAll }) => {
     entries.map(([, rules]) => rules.key)
   );
   const values = Object.fromEntries(rows.map((row) => [row.clave, row.valor]));
-  return Object.fromEntries(entries.map(([field, rules]) => [field, values[rules.key] ?? rules.defaultValue]));
+  return Object.fromEntries(entries.map(([field, rules]) => [field, values[rules.key] || rules.defaultValue]));
 };
 
 const normalizeShippingInfo = (shippingInfo = {}) => {
@@ -777,6 +908,12 @@ app.put('/api/admin/config/banco', requireAdmin, async (req, res) => {
     const alias = String(req.body?.alias || '').trim();
     const cbu = String(req.body?.cbu || '').trim();
     const titular = String(req.body?.titular || '').trim();
+    if (alias && (!/^[a-z0-9]+(?:\.[a-z0-9]+){1,5}$/i.test(alias) || alias.length < 6 || alias.length > 20)) {
+      return res.status(400).json({ error: 'El alias debe tener entre 6 y 20 letras o números separados por puntos.' });
+    }
+    if (cbu && !/^\d{22}$/.test(cbu)) {
+      return res.status(400).json({ error: 'El CBU debe contener exactamente 22 dígitos.' });
+    }
     if (alias.length > 100 || cbu.length > 100 || titular.length > 160) {
       return res.status(400).json({ error: 'Los datos bancarios superan la longitud permitida.' });
     }
@@ -796,6 +933,59 @@ app.put('/api/admin/config/banco', requireAdmin, async (req, res) => {
 });
 
 // ─────────────────────────────────────────
+app.get('/api/config/payment-methods', async (req, res) => {
+  try {
+    const [config, readiness] = await Promise.all([getPaymentConfig(), getPaymentReadiness()]);
+    res.json({
+      ...config,
+      transferenciaEnabled: config.transferenciaEnabled && readiness.transferencia.available,
+      efectivoEnabled: config.efectivoEnabled && readiness.efectivo.available,
+      mercadopagoEnabled: config.mercadopagoEnabled && readiness.mercadopago.available,
+    });
+  } catch (error) {
+    internalError(res);
+  }
+});
+
+app.get('/api/admin/config/payment-methods', requireAdmin, async (req, res) => {
+  try {
+    const [config, readiness] = await Promise.all([getPaymentConfig(), getPaymentReadiness()]);
+    res.json({ ...config, readiness });
+  } catch (error) {
+    internalError(res);
+  }
+});
+
+app.put('/api/admin/config/payment-methods', requireAdmin, async (req, res) => {
+  try {
+    const config = normalizePaymentConfig(req.body || {});
+    const readiness = await getPaymentReadiness();
+    const methodFields = [
+      ['transferenciaEnabled', 'transferencia'],
+      ['efectivoEnabled', 'efectivo'],
+      ['mercadopagoEnabled', 'mercadopago'],
+    ];
+    for (const [field, method] of methodFields) {
+      if (config[field] && !readiness[method].available) {
+        return res.status(400).json({ error: `No se puede habilitar ${method === 'mercadopago' ? 'Mercado Pago' : method}: ${readiness[method].reason}` });
+      }
+    }
+    await withTransaction(async (transaction) => {
+      for (const [field, key] of Object.entries(PAYMENT_CONFIG_KEYS)) {
+        await transaction.run(
+          `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
+           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+          [key, String(config[field])],
+        );
+      }
+    });
+    res.json(config);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    internalError(res);
+  }
+});
+
 // GET /api/config/store (public)
 app.get('/api/config/store', async (req, res) => {
   try {
@@ -987,8 +1177,11 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Estado inválido' });
     }
 
-    const check = await dbGet('SELECT id FROM pedidos WHERE id = ?', [req.params.id]);
+    const check = await dbGet('SELECT id, metodo_pago, estado FROM pedidos WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (check.metodo_pago === 'mercadopago' && check.estado === 'pendiente_pago' && estado !== 'pendiente_pago') {
+      return res.status(409).json({ error: 'El estado de un pago de Mercado Pago se actualiza automáticamente al recibir su confirmación.' });
+    }
 
     await dbRun('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, req.params.id]);
     res.json({ message: 'Estado actualizado exitosamente' });
@@ -1204,14 +1397,32 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
 
 // POST /api/orders (protected client)
 app.post('/api/orders', requireClient, async (req, res) => {
+  let mercadoPagoOrderToRelease = null;
   try {
     const { items, metodo_pago: paymentMethod, shippingInfo } = req.body;
     if (!PAYMENT_METHODS.has(paymentMethod)) {
       return res.status(400).json({ error: 'Metodo de pago invalido.' });
     }
+    const paymentConfig = await getPaymentConfig();
+    const enabledField = {
+      transferencia: 'transferenciaEnabled',
+      efectivo: 'efectivoEnabled',
+      mercadopago: 'mercadopagoEnabled',
+    }[paymentMethod];
+    if (!paymentConfig[enabledField]) {
+      return res.status(409).json({ error: 'Este medio de pago no está disponible. Elegí otro para continuar.' });
+    }
+    if (paymentMethod === 'mercadopago' && !MP_ACCESS_TOKEN) {
+      return res.status(409).json({ error: 'Este medio de pago no está disponible. Elegí otro para continuar.' });
+    }
+    if (paymentMethod === 'transferencia') {
+      const bankConfig = await getBankConfig();
+      if (getTransferConfigIssue(bankConfig)) return res.status(409).json({ error: 'Este medio de pago no está disponible. Elegí otro para continuar.' });
+    }
     const delivery = normalizeShippingInfo(shippingInfo);
 
     const { orderId, trustedOrder, surcharge, shippingCost, chargedTotal } = await withTransaction(async (transaction) => {
+      await releaseExpiredMercadoPagoReservations(transaction);
       const trustedOrder = await getTrustedOrderLines(items, transaction);
       const shippingCost = Number(delivery.quote.price || 0);
       const baseTotalCents = Math.round((trustedOrder.total + shippingCost) * 100);
@@ -1231,7 +1442,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
       }
 
       const updatedProducts = [];
-      if (paymentMethod !== 'mercadopago') {
+      {
         for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
           const result = await transaction.run(
             `UPDATE productos
@@ -1253,19 +1464,6 @@ app.post('/api/orders', requireClient, async (req, res) => {
           }
           updatedProducts.push(product);
         }
-      } else {
-        for (const [productId, requested] of requestedByProduct) {
-          const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ? AND activo = TRUE', [productId]);
-          if (!current) {
-            throw Object.assign(new Error(`El producto ${requested.name} ya no esta disponible.`), { status: 409 });
-          }
-          if (current.stock < requested.quantity) {
-            throw Object.assign(
-              new Error(`Solo quedan ${current.stock} unidades de ${current.nombre}.`),
-              { status: 409, productId: current.id, available: current.stock, productName: current.nombre }
-            );
-          }
-        }
       }
 
       const initialStatus = paymentMethod === 'transferencia'
@@ -1278,8 +1476,9 @@ app.post('/api/orders', requireClient, async (req, res) => {
         `INSERT INTO pedidos (
           cliente_id, total, estado, metodo_pago, recargo_aplicado,
           entrega_nombre, entrega_email, entrega_telefono, entrega_direccion, entrega_notas,
-          envio_destination_id, envio_localidad, envio_provincia, envio_cp, envio_costo
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          envio_destination_id, envio_localidad, envio_provincia, envio_cp, envio_costo,
+          stock_reservado_mp, reserva_stock_expira_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = TRUE THEN CURRENT_TIMESTAMP + (? * INTERVAL '1 minute') ELSE NULL END) RETURNING id`,
         [
           req.user.id,
           chargedTotal,
@@ -1295,10 +1494,14 @@ app.post('/api/orders', requireClient, async (req, res) => {
           delivery.quote.destination.localidad,
           delivery.quote.destination.provincia,
           delivery.quote.destination.cp,
-          shippingCost
+          shippingCost,
+          paymentMethod === 'mercadopago',
+          paymentMethod === 'mercadopago',
+          MP_STOCK_RESERVATION_MINUTES
         ]
       );
       const pedidoId = orderResult.rows?.[0]?.id ?? orderResult.lastID;
+      if (paymentMethod === 'mercadopago') mercadoPagoOrderToRelease = pedidoId;
 
       for (const line of trustedOrder.lines) {
         await transaction.run(
@@ -1370,6 +1573,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
       });
 
       init_point = prefResult.init_point;
+      mercadoPagoOrderToRelease = null;
       if (prefResult.id) {
         await dbRun(
           "UPDATE pedidos SET mp_preference_id = ? WHERE id = ? AND metodo_pago = 'mercadopago'",
@@ -1391,6 +1595,18 @@ app.post('/api/orders', requireClient, async (req, res) => {
       message: 'Pedido creado exitosamente'
     });
   } catch (err) {
+    if (mercadoPagoOrderToRelease) {
+      try {
+        await withTransaction(async (transaction) => {
+          await releaseMercadoPagoReservation(mercadoPagoOrderToRelease, transaction, {
+            status: 'pago_rechazado',
+            reason: 'No se pudo iniciar el pago. Podés volver a intentarlo.'
+          });
+        });
+      } catch (releaseError) {
+        console.error('No se pudo liberar la reserva del pedido de Mercado Pago:', releaseError.message);
+      }
+    }
     if (err.status) {
       return res.status(err.status).json({
         error: err.message,
@@ -1462,8 +1678,9 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     const approvedAt = paymentData.date_approved || null;
 
     await withTransaction(async (transaction) => {
+      await releaseExpiredMercadoPagoReservations(transaction);
       const order = await transaction.get(
-        'SELECT id, estado, metodo_pago, mp_payment_id FROM pedidos WHERE id = ?',
+        'SELECT id, estado, metodo_pago, mp_payment_id, stock_reservado_mp FROM pedidos WHERE id = ? FOR UPDATE',
         [orderId]
       );
 
@@ -1474,6 +1691,31 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 
       if (order.metodo_pago !== 'mercadopago') {
         console.warn('Webhook MP recibido para pedido no Mercado Pago:', orderId, 'payment:', paymentId);
+        return;
+      }
+
+      if (order.mp_payment_id && String(order.mp_payment_id) !== paymentId) {
+        console.warn('Pedido con payment_id previo distinto. No se modifica el pedido:', orderId);
+        return;
+      }
+
+      if (['rejected', 'cancelled'].includes(paymentStatus)) {
+        await transaction.run(
+          'UPDATE pedidos SET mp_payment_id = COALESCE(mp_payment_id, ?), mp_payment_status = ?, mp_payment_status_detail = ?, mp_last_webhook_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [paymentId, paymentStatus, paymentStatusDetail, orderId]
+        );
+        const released = await releaseMercadoPagoReservation(orderId, transaction, {
+          status: 'pago_rechazado',
+          reason: paymentStatus === 'cancelled'
+            ? 'El pago fue cancelado en Mercado Pago. Podés iniciar una nueva compra.'
+            : 'Mercado Pago rechazó el pago. Podés iniciar una nueva compra.'
+        });
+        if (!released && order.estado === 'pendiente_pago') {
+          await transaction.run(
+            "UPDATE pedidos SET estado = 'pago_rechazado', pago_rechazo_motivo = ? WHERE id = ?",
+            [paymentStatus === 'cancelled' ? 'El pago fue cancelado en Mercado Pago.' : 'Mercado Pago rechazó el pago.', orderId]
+          );
+        }
         return;
       }
 
@@ -1499,24 +1741,9 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         ]
       );
 
-      if (paymentStatus !== 'approved') {
-        if (['rejected', 'cancelled'].includes(paymentStatus) && order.estado === 'pendiente_pago') {
-          await transaction.run(
-            "UPDATE pedidos SET estado = 'pago_rechazado' WHERE id = ?",
-            [orderId]
-          );
-        }
-        return;
-      }
+      if (paymentStatus !== 'approved') return;
 
-      if (order.estado === 'aprobado') {
-        return;
-      }
-
-      if (order.mp_payment_id && String(order.mp_payment_id) !== paymentId) {
-        console.warn('Pedido con payment_id previo distinto. No se descuenta stock nuevamente:', orderId);
-        return;
-      }
+      if (['aprobado', 'pago_aprobado_sin_stock'].includes(order.estado)) return;
 
       const items = await transaction.all(
         'SELECT pi.producto_id, pi.cantidad, pr.nombre AS producto_nombre ' +
@@ -1534,18 +1761,34 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         requestedByProduct.set(productId, current);
       }
 
-      for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
-        const result = await transaction.run(
-          'UPDATE productos ' +
-          'SET stock = GREATEST(0, stock - ?) ' +
-          'WHERE id = ? ' +
-          'RETURNING id, nombre, stock',
-          [requested.quantity, productId]
-        );
-        const product = result.rows?.[0];
-        if (product && Number(product.stock) === 0) {
-          await deactivateOffersForProduct(product.id, product.nombre, transaction);
+      if (!order.stock_reservado_mp) {
+        const lockedProducts = [];
+        for (const [productId, requested] of [...requestedByProduct].sort(([a], [b]) => a.localeCompare(b))) {
+          const product = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ? FOR UPDATE', [productId]);
+          if (!product || Number(product.stock) < requested.quantity) {
+            await transaction.run(
+              "UPDATE pedidos SET estado = 'pago_aprobado_sin_stock', pago_rechazo_motivo = ? WHERE id = ?",
+              [`Mercado Pago aprobó el pago, pero venció la reserva y no hay stock suficiente de ${requested.name}. Contactá al cliente para resolverlo.`, orderId]
+            );
+            return;
+          }
+          lockedProducts.push({ product, quantity: requested.quantity });
         }
+        for (const { product, quantity } of lockedProducts) {
+          const result = await transaction.run(
+            'UPDATE productos SET stock = stock - ? WHERE id = ? RETURNING id, nombre, stock',
+            [quantity, product.id]
+          );
+          const updatedProduct = result.rows?.[0];
+          if (updatedProduct && Number(updatedProduct.stock) === 0) {
+            await deactivateOffersForProduct(updatedProduct.id, updatedProduct.nombre, transaction);
+          }
+        }
+      } else {
+        await transaction.run(
+          'UPDATE pedidos SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL WHERE id = ?',
+          [orderId]
+        );
       }
 
       await transaction.run(
@@ -1563,7 +1806,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     res.status(200).send('OK');
   } catch (err) {
     console.error('Error procesando webhook de Mercado Pago:', err);
-    res.status(200).send('OK');
+    res.status(500).json({ error: 'No se pudo procesar la notificación de pago.' });
   }
 });
 const runReceiptUpload = (req, res, next) => receiptUpload.single('comprobante')(req, res, (error) => {
@@ -1755,6 +1998,8 @@ const ensureDatabaseSchema = async () => {
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_approved_at TIMESTAMPTZ');
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_last_webhook_at TIMESTAMPTZ');
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pago_rechazo_motivo TEXT');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS stock_reservado_mp BOOLEAN NOT NULL DEFAULT FALSE');
+    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reserva_stock_expira_at TIMESTAMPTZ');
     await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS pedidos_mp_payment_id_unique ON pedidos(mp_payment_id) WHERE mp_payment_id IS NOT NULL');
     for (const rules of Object.values(STORE_CONFIG_FIELDS)) {
       await dbRun(
@@ -1779,6 +2024,8 @@ const ensureDatabaseSchema = async () => {
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_rechazado''', estado_type);
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pendiente_pago''', estado_type);
           EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''aprobado''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_vencido''', estado_type);
+          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_aprobado_sin_stock''', estado_type);
         ELSE
           FOR estado_constraint IN
             SELECT conname
@@ -1791,7 +2038,7 @@ const ensureDatabaseSchema = async () => {
           END LOOP;
           ALTER TABLE pedidos
             ADD CONSTRAINT pedidos_estado_check
-            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'enviado', 'completado', 'pendiente_pago', 'aprobado'));
+            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'enviado', 'completado', 'pendiente_pago', 'aprobado'));
         END IF;
       END $$;
     `);
@@ -1801,7 +2048,19 @@ const ensureDatabaseSchema = async () => {
   }
 };
 
-ensureDatabaseSchema();
+const synchronizeExpiredReservations = async () => {
+  try {
+    const released = await withTransaction(releaseExpiredMercadoPagoReservations);
+    if (released > 0) console.log(`Se liberaron reservas vencidas de ${released} pedido(s) de Mercado Pago.`);
+  } catch (error) {
+    console.error('No se pudieron liberar las reservas vencidas:', error.message);
+  }
+};
+
+await ensureDatabaseSchema();
+await synchronizeExpiredReservations();
+const reservationCleanupTimer = setInterval(synchronizeExpiredReservations, 60_000);
+reservationCleanupTimer.unref();
 
 app.listen(PORT, () => {
   console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
