@@ -24,6 +24,26 @@ import { DEFAULT_STORE_CONFIG, mergeStoreConfig } from '../config/storeDefaults'
 const formatPrice = (value) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(value ?? 0);
 
+function OrderProductThumb({ item, size = 'md' }) {
+  const sizeClass = size === 'sm' ? 'h-9 w-9' : 'h-12 w-12';
+  return (
+    <div className={`${sizeClass} shrink-0 overflow-hidden border border-gray-200 bg-[#f5f0e8]`}>
+      {item?.producto_imagen ? (
+        <img
+          src={item.producto_imagen}
+          alt={item.producto_nombre || 'Producto vendido'}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-[10px] font-black uppercase tracking-wider text-[#a78665]">
+          ND
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────── PRODUCT FORM ───────────────
 const EMPTY_PRODUCT_FORM = { name: '', category: 'alimentos', price: '', description: '', stock: '', featured: false };
 const EMPTY_OFFER_FORM = { nombre: '', producto_ids: [], descuento_o_precio_paquete: '', tipo_descuento: 'precio_paquete', prioridad: 0, activa: true };
@@ -1656,7 +1676,7 @@ export default function Admin() {
                             <tr className={`transition-colors duration-700 hover:bg-[#fcfaf5] ${highlightAttentionOrders && pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'bg-amber-100' : 'bg-white'}`}>
                               <td className="px-5 py-4"><p className="text-sm font-black text-gray-950">#{order.id}</p><p className="mt-0.5 text-[11px] font-semibold text-gray-500">{new Date(order.fecha).toLocaleString()}</p></td>
                               <td className="px-5 py-4"><p className="text-sm font-extrabold text-gray-900">{order.cliente_nombre}</p><p className="text-[11px] font-medium text-gray-500">{order.cliente_email}</p></td>
-                              <td className="px-5 py-4"><div className="flex items-center gap-3">{firstItem?.producto_imagen && <img src={firstItem.producto_imagen} alt="" className="h-11 w-11 border border-gray-200 bg-white object-contain p-1" />}<div><p className="max-w-56 truncate text-xs font-bold text-gray-900">{firstItem ? `${firstItem.producto_nombre} × ${firstItem.cantidad}` : 'Sin detalle'}</p>{(order.items?.length || 0) > 1 && <p className="text-[10px] font-semibold text-gray-500">+ {order.items.length - 1} producto{order.items.length > 2 ? 's' : ''}</p>}</div></div></td>
+                              <td className="px-5 py-4"><div className="flex items-center gap-3"><OrderProductThumb item={firstItem} /><div className="min-w-0"><p className="max-w-64 truncate text-xs font-extrabold text-gray-950">{firstItem ? `${firstItem.producto_nombre} × ${firstItem.cantidad}` : 'Sin detalle'}</p>{(order.items?.length || 0) > 1 && <p className="mt-1 text-[10px] font-bold text-gray-500">+ {order.items.length - 1} producto{order.items.length > 2 ? 's' : ''} más</p>}</div></div></td>
                               <td className="px-5 py-4 text-sm font-black text-gray-950">{formatPrice(order.total)}</td>
                               <td className="px-5 py-4"><span className={`inline-flex px-3 py-2 text-xs font-extrabold ${statusClass}`}>{statusLabel}</span></td>
                               <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} aria-expanded={expanded} className="inline-flex items-center gap-2 bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] transition-all duration-300 hover:bg-[#c39e22] hover:shadow-sm cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}<ArrowDown className={`h-3.5 w-3.5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} /></button></td>
@@ -1664,7 +1684,7 @@ export default function Admin() {
                             <tr><td colSpan="6" className="bg-[#faf8f3] p-0"><div className={`grid transition-[grid-template-rows,opacity] duration-500 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}><div className="overflow-hidden">{order.estado === 'pago_aprobado_sin_stock' && <p className="mx-5 mt-5 border border-red-300 bg-red-50 p-3 text-xs font-bold text-red-900">{order.pago_rechazo_motivo}</p>}<div className="grid gap-5 px-5 py-5 lg:grid-cols-3">
                                 {pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) && <div className="lg:col-span-3"><ReceiptReviewCard order={order} onFeedback={showFeedback} onUpdated={refreshOrders} compact /></div>}
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Entrega</p><div className="space-y-1 text-xs font-semibold text-gray-700">{order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}{order.entrega_telefono && <p><strong>Teléfono:</strong> {order.entrega_telefono}</p>}{order.entrega_direccion && <p><strong>Dirección:</strong> {order.entrega_direccion}</p>}{order.envio_localidad && <p><strong>Destino:</strong> {order.envio_localidad}, {order.envio_provincia}</p>}</div></div>
-                                <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex justify-between gap-3 text-xs"><span className="font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
+                                <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 text-xs"><div className="flex min-w-0 items-center gap-2"><OrderProductThumb item={item} size="sm" /><span className="truncate font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span></div><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
                                 <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="pago_vencido">Pago vencido</option><option value="pago_aprobado_sin_stock">Pago aprobado · falta stock</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
                               </div></div></div></td></tr>
                           </React.Fragment>

@@ -507,6 +507,14 @@ const mapOffer = async (o) => {
   };
 };
 
+const mapOrderItem = (item) => {
+  const images = parseStoredImageUrls(item.producto_imagenes, item.producto_imagen);
+  return {
+    ...item,
+    producto_imagen: images[0] || item.producto_imagen || '',
+  };
+};
+
 const deactivateOffersForProduct = async (productId, productName, query = { all: dbAll, run: dbRun }) => {
   try {
     const offers = await query.all('SELECT id, producto_ids FROM ofertas WHERE activa = TRUE');
@@ -1171,12 +1179,12 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
     // For each order, fetch items and product details
     for (const order of orders) {
       const items = await dbAll(`
-        SELECT pi.*, pr.nombre as producto_nombre
+        SELECT pi.*, pr.nombre as producto_nombre, pr.imagen_url as producto_imagen, pr.imagenes as producto_imagenes
         FROM pedido_items pi
         JOIN productos pr ON pi.producto_id = pr.id
         WHERE pi.pedido_id = ?
       `, [order.id]);
-      order.items = items;
+      order.items = items.map(mapOrderItem);
     }
 
     res.json(orders);
@@ -1397,12 +1405,12 @@ app.get('/api/clients/orders', requireClient, async (req, res) => {
     // For each order, fetch items and product details
     for (const order of orders) {
       const items = await dbAll(`
-        SELECT pi.*, pr.nombre as producto_nombre, pr.imagen_url as producto_imagen
+        SELECT pi.*, pr.nombre as producto_nombre, pr.imagen_url as producto_imagen, pr.imagenes as producto_imagenes
         FROM pedido_items pi
         JOIN productos pr ON pi.producto_id = pr.id
         WHERE pi.pedido_id = ?
       `, [order.id]);
-      order.items = items;
+      order.items = items.map(mapOrderItem);
     }
 
     res.json(orders);
