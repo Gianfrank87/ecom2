@@ -42,6 +42,29 @@ if (MP_ACCESS_TOKEN) {
 }
 const PAYMENT_METHODS = new Set(['transferencia', 'efectivo', 'mercadopago']);
 const ORDER_STATUSES = new Set(['pendiente', 'esperando_aprobacion', 'pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'enviado', 'completado', 'pendiente_pago', 'aprobado']);
+const ORDER_STATUS_LABELS = {
+  pendiente: 'Pendiente',
+  pendiente_pago: 'Pendiente de pago',
+  esperando_aprobacion: 'Comprobante pendiente',
+  aprobado: 'Pago aprobado',
+  pago_rechazado: 'Pago rechazado',
+  pago_vencido: 'Pago vencido',
+  pago_aprobado_sin_stock: 'Pago aprobado sin stock',
+  enviado: 'Enviado',
+  completado: 'Completado',
+};
+const ORDER_TERMINAL_STATUSES = new Set(['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'completado']);
+const ORDER_NORMAL_TRANSITIONS = {
+  pendiente: new Set(['enviado', 'pago_rechazado']),
+  aprobado: new Set(['enviado', 'pago_rechazado']),
+  esperando_aprobacion: new Set(['pago_rechazado']),
+  enviado: new Set(['completado']),
+  pendiente_pago: new Set(['pendiente_pago']),
+  pago_rechazado: new Set([]),
+  pago_vencido: new Set([]),
+  pago_aprobado_sin_stock: new Set([]),
+  completado: new Set([]),
+};
 const MP_STOCK_RESERVATION_MINUTES = 30;
 const BANK_CONFIG_KEYS = ['banco_alias', 'banco_cbu', 'banco_titular'];
 const DEFAULT_PAYMENT_CONFIG = {
@@ -457,6 +480,61 @@ const requireClient = (req, res, next) => {
   } catch (err) {
     return res.status(401).json({ error: 'Token inválido o expirado.' });
   }
+};
+
+const normalizeAuditDetails = (details = {}) => JSON.stringify(details, (_key, value) => {
+  if (value === undefined) return null;
+  return value;
+});
+
+const createOrderAuditEntry = async ({
+  orderId,
+  actor,
+  action,
+  fromStatus = null,
+  toStatus = null,
+  reason = null,
+  details = {},
+}, query = { run: dbRun }) => {
+  await query.run(
+    `INSERT INTO pedido_auditoria
+      (pedido_id, actor_id, actor_nombre, actor_email, accion, estado_anterior, estado_nuevo, motivo, detalles)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)`,
+    [
+      orderId,
+      actor?.id || null,
+      actor?.name || actor?.nombre || actor?.email || 'Sistema',
+      actor?.email || null,
+      action,
+      fromStatus,
+      toStatus,
+      reason,
+      normalizeAuditDetails(details),
+    ]
+  );
+};
+
+const getOrderTransitionValidation = ({ fromStatus, toStatus, overrideReason = '' }) => {
+  if (fromStatus === toStatus) return { ok: true, requiresOverride: false };
+  if (!ORDER_STATUSES.has(toStatus)) return { ok: false, error: 'Estado inválido' };
+  if (fromStatus === 'pendiente_pago' && toStatus !== 'pendiente_pago') {
+    return { ok: false, status: 409, error: 'El estado de un pago de Mercado Pago se actualiza automáticamente al recibir su confirmación.' };
+  }
+
+  const normalTransitions = ORDER_NORMAL_TRANSITIONS[fromStatus] || new Set();
+  if (normalTransitions.has(toStatus)) return { ok: true, requiresOverride: false };
+
+  const protectedCorrection = ORDER_TERMINAL_STATUSES.has(fromStatus)
+    || toStatus === 'completado'
+    || ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock'].includes(fromStatus)
+    || ['enviado', 'completado'].includes(fromStatus) && ['pendiente', 'aprobado', 'esperando_aprobacion'].includes(toStatus);
+  if (!protectedCorrection) {
+    return { ok: false, status: 409, error: `No se puede cambiar de ${ORDER_STATUS_LABELS[fromStatus] || fromStatus} a ${ORDER_STATUS_LABELS[toStatus] || toStatus} directamente.` };
+  }
+  if (overrideReason.trim().length < 10 || overrideReason.trim().length > 500) {
+    return { ok: false, status: 409, error: 'Este cambio es sensible. Indicá un motivo de corrección de entre 10 y 500 caracteres.' };
+  }
+  return { ok: true, requiresOverride: true };
 };
 
 // Helper: map product row to frontend shape
@@ -1193,22 +1271,70 @@ app.get('/api/orders', requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/orders/:id/audit (admin only)
+app.get('/api/orders/:id/audit', requireAdmin, async (req, res) => {
+  try {
+    const order = await dbGet('SELECT id FROM pedidos WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const audit = await dbAll(
+      `SELECT id, pedido_id, actor_id, actor_nombre, actor_email, accion, estado_anterior, estado_nuevo, motivo, detalles, fecha
+       FROM pedido_auditoria
+       WHERE pedido_id = ?
+       ORDER BY fecha DESC, id DESC`,
+      [req.params.id]
+    );
+    res.json(audit);
+  } catch (err) {
+    internalError(res, err);
+  }
+});
+
 // PATCH /api/orders/:id/status (admin only)
 app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   try {
     const { estado } = req.body;
+    const rejectionReason = String(req.body?.reason || '').trim();
+    const overrideReason = String(req.body?.overrideReason || '').trim();
     if (!ORDER_STATUSES.has(estado)) {
       return res.status(400).json({ error: 'Estado inválido' });
+    }
+    if (estado === 'pago_rechazado' && (rejectionReason.length < 5 || rejectionReason.length > 500)) {
+      return res.status(400).json({ error: 'Indicá un motivo de rechazo de entre 5 y 500 caracteres.' });
     }
 
     const check = await dbGet('SELECT id, metodo_pago, estado FROM pedidos WHERE id = ?', [req.params.id]);
     if (!check) return res.status(404).json({ error: 'Pedido no encontrado' });
-    if (check.metodo_pago === 'mercadopago' && check.estado === 'pendiente_pago' && estado !== 'pendiente_pago') {
-      return res.status(409).json({ error: 'El estado de un pago de Mercado Pago se actualiza automáticamente al recibir su confirmación.' });
-    }
+    const transition = getOrderTransitionValidation({ fromStatus: check.estado, toStatus: estado, overrideReason });
+    if (!transition.ok) return res.status(transition.status || 400).json({ error: transition.error });
 
-    await dbRun('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, req.params.id]);
-    res.json({ message: 'Estado actualizado exitosamente' });
+    let updatedOrder;
+    if (estado === 'pago_rechazado') {
+      updatedOrder = await dbGet(
+        'UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ? RETURNING estado, pago_rechazo_motivo',
+        [estado, rejectionReason, req.params.id]
+      );
+    } else {
+      updatedOrder = await dbGet(
+        'UPDATE pedidos SET estado = ? WHERE id = ? RETURNING estado, pago_rechazo_motivo',
+        [estado, req.params.id]
+      );
+    }
+    if (check.estado !== updatedOrder?.estado) {
+      await createOrderAuditEntry({
+        orderId: req.params.id,
+        actor: req.user,
+        action: transition.requiresOverride ? 'correccion_estado' : 'cambio_estado',
+        fromStatus: check.estado,
+        toStatus: updatedOrder?.estado || estado,
+        reason: rejectionReason || overrideReason || null,
+        details: { via: 'admin_status_select', protectedCorrection: transition.requiresOverride },
+      });
+    }
+    res.json({
+      message: 'Estado actualizado exitosamente',
+      estado: updatedOrder?.estado || estado,
+      pago_rechazo_motivo: updatedOrder?.pago_rechazo_motivo || null,
+    });
   } catch (err) {
     internalError(res);
   }
@@ -2025,11 +2151,20 @@ app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'El pedido no tiene un comprobante de transferencia.' });
     }
     const estado = decision === 'approved' ? 'pendiente' : 'pago_rechazado';
-    await dbRun(
-      'UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ?',
+    const updatedOrder = await dbGet(
+      'UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ? RETURNING estado, pago_rechazo_motivo',
       [estado, decision === 'rejected' ? rejectionReason : null, req.params.id]
     );
-    res.json({ message: decision === 'approved' ? 'Pago aprobado.' : 'Pago rechazado.', estado });
+    await createOrderAuditEntry({
+      orderId: req.params.id,
+      actor: req.user,
+      action: decision === 'approved' ? 'pago_aprobado' : 'pago_rechazado',
+      fromStatus: order.estado,
+      toStatus: updatedOrder?.estado || estado,
+      reason: decision === 'rejected' ? rejectionReason : null,
+      details: { via: 'receipt_review', hadReceipt: Boolean(order.comprobante_url) },
+    });
+    res.json({ message: decision === 'approved' ? 'Pago aprobado.' : 'Pago rechazado.', estado, pago_rechazo_motivo: updatedOrder?.pago_rechazo_motivo || null });
   } catch (error) {
     internalError(res);
   }
@@ -2113,6 +2248,22 @@ const ensureDatabaseSchema = async () => {
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pago_rechazo_motivo TEXT');
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS stock_reservado_mp BOOLEAN NOT NULL DEFAULT FALSE');
     await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reserva_stock_expira_at TIMESTAMPTZ');
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS pedido_auditoria (
+        id BIGSERIAL PRIMARY KEY,
+        pedido_id BIGINT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+        actor_id BIGINT,
+        actor_nombre VARCHAR(120),
+        actor_email VARCHAR(255),
+        accion VARCHAR(80) NOT NULL,
+        estado_anterior VARCHAR(40),
+        estado_nuevo VARCHAR(40),
+        motivo TEXT,
+        detalles JSONB,
+        fecha TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await dbRun('CREATE INDEX IF NOT EXISTS pedido_auditoria_pedido_fecha_idx ON pedido_auditoria(pedido_id, fecha DESC)');
     await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS pedidos_mp_payment_id_unique ON pedidos(mp_payment_id) WHERE mp_payment_id IS NOT NULL');
     for (const rules of Object.values(STORE_CONFIG_FIELDS)) {
       await dbRun(

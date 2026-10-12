@@ -243,13 +243,27 @@ export const api = {
     return res.json();
   },
 
-  updateOrderStatus: async (id, estado) => {
+  updateOrderStatus: async (id, estado, reason = '', overrideReason = '') => {
     const res = await fetch(`${API_URL}/orders/${id}/status`, {
       method: 'PATCH',
       headers: authHeaders(),
-      body: JSON.stringify({ estado })
+      body: JSON.stringify({ estado, reason, overrideReason })
     });
-    if (!res.ok) throw new Error('Error al actualizar estado');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al actualizar estado');
+    }
+    return res.json();
+  },
+
+  getOrderAudit: async (orderId) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}/audit`, {
+      headers: authHeaders()
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al obtener auditoría del pedido');
+    }
     return res.json();
   },
 

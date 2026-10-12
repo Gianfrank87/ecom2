@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, Clock, Truck, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send, ArrowDown, ArrowUp, Menu, Settings, ExternalLink, UserRound } from 'lucide-react';
+import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, Clock, Truck, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send, ArrowDown, ArrowUp, Menu, Settings, ExternalLink, UserRound, BarChart3, Trophy, Wallet, Hourglass, TrendingUp, CreditCard } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -44,7 +44,411 @@ function OrderProductThumb({ item, size = 'md' }) {
   );
 }
 
+const getReceiptKind = (reference = '') => {
+  const normalized = String(reference).toLowerCase();
+  if (normalized.includes('.pdf')) return 'PDF';
+  if (normalized.includes('.png')) return 'PNG';
+  if (normalized.includes('.jpg') || normalized.includes('.jpeg')) return 'JPG';
+  return 'Archivo';
+};
+
+function ReceiptQuickPreview({ order, onFeedback }) {
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const receiptKind = getReceiptKind(order.comprobante_url);
+
+  const closePreview = useCallback(() => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  }, [preview]);
+
+  useEffect(() => {
+    if (!preview) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') closePreview();
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleEscape);
+      URL.revokeObjectURL(preview.url);
+    };
+  }, [closePreview, preview]);
+
+  const openPreview = async () => {
+    if (!order.comprobante_url || loading) return;
+    setLoading(true);
+    try {
+      const blob = await api.downloadOrderReceipt(order.id);
+      setPreview({ url: URL.createObjectURL(blob), type: blob.type });
+    } catch (error) {
+      onFeedback(error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!order.comprobante_url) {
+    return <span className="text-[11px] font-bold text-gray-400">Sin adjunto</span>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openPreview}
+        disabled={loading}
+        className="group relative flex w-[176px] items-center gap-3 overflow-hidden border border-[#e5d8b7] bg-white p-2.5 text-left shadow-[0_1px_0_rgba(53,40,32,0.06)] transition-all hover:-translate-y-0.5 hover:border-[#d3ad2f] hover:bg-[#fffaf0] hover:shadow-md disabled:translate-y-0 disabled:opacity-60 cursor-pointer"
+        title="Abrir comprobante"
+      >
+        <span className="absolute inset-y-0 left-0 w-1 bg-[#d3ad2f]" aria-hidden="true" />
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#eadfca] bg-[#fff7df] text-[#947516] transition-colors group-hover:border-[#d3ad2f] group-hover:bg-[#f7e7a7]">
+          <FileText className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-black leading-tight text-[#352820]">Ver comprobante</span>
+          <span className="mt-1 inline-flex items-center gap-1 bg-[#f4ead5] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#7a5b20]">
+            {loading ? 'Abriendo' : receiptKind}
+          </span>
+        </span>
+        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#a78665] transition-transform group-hover:translate-x-0.5 group-hover:text-[#352820]" />
+      </button>
+
+      {preview && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) closePreview(); }} role="presentation">
+          <div className="flex h-[92dvh] w-full max-w-5xl flex-col border border-[#352820] bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 p-3 sm:px-5">
+              <div>
+                <p className="text-sm font-extrabold text-[#352820]">Comprobante del pedido #{order.id}</p>
+                <p className="text-[11px] font-semibold text-gray-500">{order.cliente_nombre}</p>
+              </div>
+              <button type="button" onClick={closePreview} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-black cursor-pointer" aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="min-h-0 flex-1 bg-gray-100">
+              {preview.type?.includes('pdf') ? (
+                <iframe title={`Comprobante pedido ${order.id}`} src={preview.url} className="h-full w-full bg-white" />
+              ) : (
+                <div className="flex h-full items-center justify-center overflow-auto p-4">
+                  <img src={preview.url} alt={`Comprobante pedido ${order.id}`} className="max-h-full max-w-full object-contain shadow-lg" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─────────────── PRODUCT FORM ───────────────
+const DASHBOARD_PERIODS = [
+  { id: 'week', label: '7 días', days: 7 },
+  { id: 'month', label: '30 días', days: 30 },
+  { id: 'quarter', label: '90 días', days: 90 },
+  { id: 'year', label: 'Año', days: 365 },
+  { id: 'all', label: 'Todo', days: null },
+];
+
+const CONFIRMED_REVENUE_STATUSES = ['aprobado', 'enviado', 'completado'];
+const PENDING_REVENUE_STATUSES = ['esperando_aprobacion', 'pendiente_pago'];
+const FALLEN_REVENUE_STATUSES = ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock'];
+const ORDER_STATUS_LABELS = {
+  pendiente: 'En preparación',
+  pendiente_pago: 'Pendiente de pago',
+  esperando_aprobacion: 'Pago a revisar',
+  aprobado: 'Pago aprobado',
+  pago_rechazado: 'Pago rechazado',
+  pago_vencido: 'Pago vencido',
+  pago_aprobado_sin_stock: 'Pago aprobado · revisar stock',
+  enviado: 'Enviado',
+  completado: 'Completado',
+};
+const ORDER_STATUS_OPTIONS = [
+  ['pendiente', 'Pendiente'],
+  ['pendiente_pago', 'Pendiente de pago'],
+  ['esperando_aprobacion', 'Comprobante pendiente de aprobación'],
+  ['aprobado', 'Pago aprobado'],
+  ['pago_rechazado', 'Pago rechazado'],
+  ['pago_vencido', 'Pago vencido'],
+  ['pago_aprobado_sin_stock', 'Pago aprobado · falta stock'],
+  ['enviado', 'Enviado'],
+  ['completado', 'Completado'],
+];
+const PROTECTED_ORDER_STATUSES = ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'completado'];
+const NORMAL_ORDER_TRANSITIONS = {
+  pendiente: ['enviado', 'pago_rechazado'],
+  aprobado: ['enviado', 'pago_rechazado'],
+  esperando_aprobacion: ['pago_rechazado'],
+  enviado: ['completado'],
+  pendiente_pago: ['pendiente_pago'],
+  pago_rechazado: [],
+  pago_vencido: [],
+  pago_aprobado_sin_stock: [],
+  completado: [],
+};
+
+const isProtectedOrderTransition = (fromStatus, toStatus) => (
+  fromStatus !== toStatus
+  && (
+    PROTECTED_ORDER_STATUSES.includes(fromStatus)
+    || toStatus === 'completado'
+    || (['enviado', 'completado'].includes(fromStatus) && ['pendiente', 'aprobado', 'esperando_aprobacion'].includes(toStatus))
+  )
+);
+
+const getOrderStatusChoices = (status) => {
+  const allowed = new Set([status, ...(NORMAL_ORDER_TRANSITIONS[status] || [])]);
+  if (PROTECTED_ORDER_STATUSES.includes(status)) allowed.add('pendiente');
+  return ORDER_STATUS_OPTIONS.filter(([value]) => allowed.has(value));
+};
+
+const getAuditActionLabel = (action) => ({
+  cambio_estado: 'actualizó el estado',
+  correccion_estado: 'corrigió el estado',
+  pago_aprobado: 'aprobó el pago',
+  pago_rechazado: 'rechazó el pago',
+}[action] || 'tocó el pedido');
+
+const sumOrderTotals = (list) => list.reduce((total, order) => total + Number(order.total || 0), 0);
+const getOrderDate = (order) => new Date(order.fecha);
+const isValidDate = (date) => !Number.isNaN(date.getTime());
+
+const getPeriodRange = (period) => {
+  const selected = DASHBOARD_PERIODS.find((item) => item.id === period) || DASHBOARD_PERIODS[1];
+  const end = new Date();
+  if (!selected.days) return { label: selected.label, start: null, end, days: null };
+  const start = new Date(end);
+  start.setDate(start.getDate() - selected.days + 1);
+  start.setHours(0, 0, 0, 0);
+  return { label: selected.label, start, end, days: selected.days };
+};
+
+const filterOrdersByRange = (list, start, end) => list.filter((order) => {
+  const date = getOrderDate(order);
+  if (!isValidDate(date)) return false;
+  if (start && date < start) return false;
+  return date <= end;
+});
+
+function DashboardMetricCard({ icon: Icon, label, value, detail, tone = 'gold' }) {
+  const toneClasses = {
+    gold: 'border-[#eadfca] bg-white before:bg-[#d3ad2f]',
+    green: 'border-emerald-200 bg-emerald-50 before:bg-emerald-500',
+    amber: 'border-amber-200 bg-amber-50 before:bg-amber-500',
+    red: 'border-[#fda29b] bg-[#fff1f0] before:bg-[#b42318]',
+  }[tone];
+
+  return (
+    <div className={`group relative overflow-hidden border p-5 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-lg before:absolute before:inset-y-0 before:left-0 before:w-1 ${toneClasses}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500">{label}</p>
+          <p className="mt-3 text-2xl font-black tracking-tight text-gray-950">{value}</p>
+          <p className="mt-1 text-xs font-semibold text-gray-500">{detail}</p>
+        </div>
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-black/5 bg-white/70 text-[#352820] transition-transform duration-300 group-hover:scale-105">
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard({ orders, onOpenSales }) {
+  const [period, setPeriod] = useState('month');
+  const currentRange = getPeriodRange(period);
+  const periodOrders = filterOrdersByRange(orders, currentRange.start, currentRange.end);
+  const confirmedOrders = periodOrders.filter((order) => CONFIRMED_REVENUE_STATUSES.includes(order.estado));
+  const pendingMoneyOrders = periodOrders.filter((order) => PENDING_REVENUE_STATUSES.includes(order.estado));
+  const fallenOrders = periodOrders.filter((order) => FALLEN_REVENUE_STATUSES.includes(order.estado));
+  const confirmedTotal = sumOrderTotals(confirmedOrders);
+  const pendingTotal = sumOrderTotals(pendingMoneyOrders);
+  const fallenTotal = sumOrderTotals(fallenOrders);
+  const potentialTotal = confirmedTotal + pendingTotal;
+  const averageTicket = confirmedOrders.length ? confirmedTotal / confirmedOrders.length : 0;
+  const confirmedShare = potentialTotal > 0 ? Math.round((confirmedTotal / potentialTotal) * 100) : 0;
+  const pendingShare = potentialTotal > 0 ? 100 - confirmedShare : 0;
+
+  const previousConfirmedTotal = (() => {
+    if (!currentRange.start || !currentRange.days) return 0;
+    const previousEnd = new Date(currentRange.start);
+    previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1);
+    const previousStart = new Date(currentRange.start);
+    previousStart.setDate(previousStart.getDate() - currentRange.days);
+    return sumOrderTotals(filterOrdersByRange(orders, previousStart, previousEnd).filter((order) => CONFIRMED_REVENUE_STATUSES.includes(order.estado)));
+  })();
+  const trend = previousConfirmedTotal > 0 ? Math.round(((confirmedTotal - previousConfirmedTotal) / previousConfirmedTotal) * 100) : null;
+
+  const topProducts = Array.from(confirmedOrders.reduce((map, order) => {
+    (order.items || []).forEach((item) => {
+      const key = item.producto_id || item.producto_nombre || 'producto';
+      const previous = map.get(key) || { id: key, name: item.producto_nombre || 'Producto sin nombre', image: item.producto_imagen, quantity: 0, revenue: 0 };
+      const quantity = Number(item.cantidad || 0);
+      previous.quantity += quantity;
+      previous.revenue += quantity * Number(item.precio_unitario || 0);
+      if (!previous.image && item.producto_imagen) previous.image = item.producto_imagen;
+      map.set(key, previous);
+    });
+    return map;
+  }, new Map()).values()).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
+  const topProduct = topProducts[0];
+  const maxProductQuantity = Math.max(...topProducts.map((product) => product.quantity), 1);
+
+  const statusRows = [
+    ['aprobado', 'Pago aprobado', '#16a34a'],
+    ['enviado', 'Enviados', '#059669'],
+    ['completado', 'Completados', '#047857'],
+    ['esperando_aprobacion', 'Por revisar', '#d3ad2f'],
+    ['pendiente_pago', 'Pendiente de pago', '#b7791f'],
+    ['pago_vencido', 'Vencidos', '#b42318'],
+    ['pago_rechazado', 'Rechazados', '#d92d20'],
+  ].map(([status, label, color]) => ({
+    status,
+    label,
+    color,
+    count: periodOrders.filter((order) => order.estado === status).length,
+  }));
+  const maxStatusCount = Math.max(...statusRows.map((row) => row.count), 1);
+
+  const paymentRows = ['transferencia', 'mercadopago', 'efectivo'].map((method) => {
+    const list = periodOrders.filter((order) => order.metodo_pago === method);
+    const label = { transferencia: 'Transferencia', mercadopago: 'Mercado Pago', efectivo: 'Efectivo' }[method];
+    return { method, label, count: list.length, total: sumOrderTotals(list.filter((order) => !FALLEN_REVENUE_STATUSES.includes(order.estado))) };
+  });
+
+  const newestImportantOrders = [...periodOrders]
+    .filter((order) => [...PENDING_REVENUE_STATUSES, ...FALLEN_REVENUE_STATUSES].includes(order.estado))
+    .sort((a, b) => getOrderDate(b) - getOrderDate(a))
+    .slice(0, 4);
+
+  return (
+    <div className="space-y-6 text-left">
+      <div className="relative overflow-hidden border border-[#352820] bg-[#352820] p-6 text-white shadow-xl sm:p-8">
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#d3ad2f]/20 blur-2xl" />
+        <div className="absolute bottom-0 right-10 h-24 w-64 bg-[#d3ad2f]/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="inline-flex items-center gap-2 border border-[#f0dc78]/30 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#f0dc78]"><BarChart3 className="h-3.5 w-3.5" /> Dashboard de ventas</p>
+            <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Caja, pedidos y productos que mueven la tienda</h2>
+            <p className="mt-2 max-w-2xl text-sm font-semibold text-white/70">Separá lo cobrado de lo pendiente, mirá qué producto empuja más ventas y detectá pagos que necesitan atención.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {DASHBOARD_PERIODS.map((item) => (
+              <button key={item.id} type="button" onClick={() => setPeriod(item.id)} className={`px-3 py-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${period === item.id ? 'bg-[#d3ad2f] text-[#352820] shadow-lg' : 'border border-white/15 bg-white/5 text-white hover:bg-white/10'}`}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard icon={Wallet} label="Dinero confirmado" value={formatPrice(confirmedTotal)} detail={`${confirmedOrders.length} pedido${confirmedOrders.length === 1 ? '' : 's'} cobrado${confirmedOrders.length === 1 ? '' : 's'}`} tone="green" />
+        <DashboardMetricCard icon={Hourglass} label="Dinero pendiente" value={formatPrice(pendingTotal)} detail={`${pendingMoneyOrders.length} pago${pendingMoneyOrders.length === 1 ? '' : 's'} por aprobar o cobrar`} tone="amber" />
+        <DashboardMetricCard icon={ShoppingCart} label="Pedidos del período" value={periodOrders.length} detail={`${fallenOrders.length} caído${fallenOrders.length === 1 ? '' : 's'} / ${confirmedOrders.length} confirmado${confirmedOrders.length === 1 ? '' : 's'}`} />
+        <DashboardMetricCard icon={TrendingUp} label="Ticket promedio" value={formatPrice(averageTicket)} detail={trend === null ? 'Sin período anterior comparable' : `${trend >= 0 ? '+' : ''}${trend}% vs período anterior`} tone={trend !== null && trend < 0 ? 'red' : 'gold'} />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="border border-gray-200 bg-white p-6 shadow-xs xl:col-span-7">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-lg font-black text-gray-950">Saldo comercial</h3>
+              <p className="text-xs font-semibold text-gray-500">Confirmado vs pendiente en {currentRange.label.toLowerCase()}.</p>
+            </div>
+            <button type="button" onClick={onOpenSales} className="inline-flex items-center gap-2 bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] transition-all hover:bg-[#c39e22] hover:shadow-sm cursor-pointer">Ver ventas <ArrowDown className="h-3.5 w-3.5 -rotate-90" /></button>
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="border border-emerald-200 bg-emerald-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Ya tenemos</p>
+              <p className="mt-2 text-3xl font-black text-emerald-950">{formatPrice(confirmedTotal)}</p>
+              <p className="mt-1 text-xs font-semibold text-emerald-700">Pagos aprobados, enviados o completados.</p>
+            </div>
+            <div className="border border-amber-200 bg-amber-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Pendiente</p>
+              <p className="mt-2 text-3xl font-black text-amber-950">{formatPrice(pendingTotal)}</p>
+              <p className="mt-1 text-xs font-semibold text-amber-700">Transferencias por revisar y pagos pendientes.</p>
+            </div>
+          </div>
+          <div className="mt-6 overflow-hidden border border-gray-200 bg-gray-100">
+            <div className="flex h-4 w-full">
+              <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${confirmedShare}%` }} />
+              <div className="bg-[#d3ad2f] transition-all duration-700" style={{ width: `${pendingShare}%` }} />
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-bold text-gray-600">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-emerald-500" /> {confirmedShare}% confirmado</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-[#d3ad2f]" /> {pendingShare}% pendiente</span>
+            <span className="ml-auto font-black text-[#352820]">Potencial: {formatPrice(potentialTotal)}</span>
+          </div>
+          {fallenTotal > 0 && <p className="mt-4 border border-[#fda29b] bg-[#fff1f0] p-3 text-xs font-bold text-[#912018]">Hay {formatPrice(fallenTotal)} en pagos vencidos, rechazados o aprobados sin stock. No se suma a caja ni pendiente.</p>}
+        </div>
+
+        <div className="border border-gray-200 bg-white p-6 shadow-xs xl:col-span-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-black text-gray-950">Producto más vendido</h3>
+              <p className="text-xs font-semibold text-gray-500">Calculado sobre ventas confirmadas.</p>
+            </div>
+            <Trophy className="h-6 w-6 text-[#d3ad2f]" />
+          </div>
+          {topProduct ? (
+            <div className="mt-6 flex gap-4">
+              <div className="h-24 w-24 shrink-0 overflow-hidden border border-[#eadfca] bg-[#f5f0e8]">
+                {topProduct.image ? <img src={topProduct.image} alt={topProduct.name} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs font-black text-[#a78665]">ND</div>}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-black text-gray-950">{topProduct.name}</p>
+                <p className="mt-1 text-sm font-extrabold text-[#352820]">{topProduct.quantity} unidades</p>
+                <p className="text-xs font-semibold text-gray-500">{formatPrice(topProduct.revenue)} facturados</p>
+                <div className="mt-4 h-2 overflow-hidden bg-gray-100"><div className="h-full bg-[#d3ad2f] transition-all duration-700" style={{ width: '100%' }} /></div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+              <p className="text-sm font-black text-gray-800">Todavía no hay ventas confirmadas</p>
+              <p className="mt-1 text-xs font-semibold text-gray-500">Cuando se aprueben pagos, el ranking aparece acá.</p>
+            </div>
+          )}
+          {topProducts.length > 1 && <div className="mt-5 space-y-3">{topProducts.slice(1).map((product, index) => <div key={product.id} className="flex items-center gap-3"><span className="w-5 text-xs font-black text-gray-400">#{index + 2}</span><div className="min-w-0 flex-1"><div className="flex justify-between gap-3 text-xs font-bold"><span className="truncate text-gray-800">{product.name}</span><span className="shrink-0 text-gray-500">{product.quantity} u.</span></div><div className="mt-1 h-1.5 overflow-hidden bg-gray-100"><div className="h-full bg-[#d3ad2f]/70" style={{ width: `${Math.max(8, Math.round((product.quantity / maxProductQuantity) * 100))}%` }} /></div></div></div>)}</div>}
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="border border-gray-200 bg-white p-6 shadow-xs xl:col-span-7">
+          <h3 className="text-lg font-black text-gray-950">Estado de pedidos</h3>
+          <div className="mt-5 space-y-3">
+            {statusRows.map((row) => <div key={row.status} className="grid grid-cols-[132px_1fr_36px] items-center gap-3 text-xs font-bold"><span className="text-gray-600">{row.label}</span><div className="h-2 overflow-hidden bg-gray-100"><div className="h-full transition-all duration-700" style={{ width: `${Math.max(row.count ? 6 : 0, Math.round((row.count / maxStatusCount) * 100))}%`, backgroundColor: row.color }} /></div><span className="text-right font-black text-gray-950">{row.count}</span></div>)}
+          </div>
+        </div>
+        <div className="border border-gray-200 bg-white p-6 shadow-xs xl:col-span-5">
+          <h3 className="flex items-center gap-2 text-lg font-black text-gray-950"><CreditCard className="h-5 w-5 text-[#352820]" /> Medios de pago</h3>
+          <div className="mt-5 divide-y divide-gray-100 border border-gray-100">
+            {paymentRows.map((row) => <div key={row.method} className="flex items-center justify-between gap-4 p-3"><div><p className="text-sm font-black text-gray-900">{row.label}</p><p className="text-[11px] font-semibold text-gray-500">{row.count} pedido{row.count === 1 ? '' : 's'}</p></div><p className="text-sm font-black text-[#352820]">{formatPrice(row.total)}</p></div>)}
+          </div>
+        </div>
+      </div>
+
+      {newestImportantOrders.length > 0 && (
+        <div className="border border-[#eadfca] bg-[#fffaf0] p-5 shadow-xs">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-black text-[#352820]">Pedidos para mirar de cerca</h3>
+              <p className="text-xs font-semibold text-gray-600">Pendientes, vencidos o rechazados del período seleccionado.</p>
+            </div>
+            <button type="button" onClick={onOpenSales} className="text-xs font-black uppercase tracking-wider text-[#7a5b20] hover:text-[#352820] cursor-pointer">Ir al historial</button>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {newestImportantOrders.map((order) => <button key={order.id} type="button" onClick={onOpenSales} className="border border-[#eadfca] bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#d3ad2f] hover:shadow-sm cursor-pointer"><p className="text-xs font-black text-gray-950">Pedido #{order.id}</p><p className="mt-1 text-[11px] font-semibold text-gray-500">{order.cliente_nombre || 'Cliente'} · {new Date(order.fecha).toLocaleDateString('es-AR')}</p><p className="mt-2 text-sm font-black text-[#352820]">{formatPrice(order.total)}</p><p className="mt-1 text-[10px] font-black uppercase tracking-wider text-[#b42318]">{order.estado.replaceAll('_', ' ')}</p></button>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const EMPTY_PRODUCT_FORM = { name: '', category: 'alimentos', price: '', description: '', stock: '', featured: false };
 const EMPTY_OFFER_FORM = { nombre: '', producto_ids: [], descuento_o_precio_paquete: '', tipo_descuento: 'precio_paquete', prioridad: 0, activa: true };
 function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
@@ -936,7 +1340,7 @@ export default function Admin() {
   const { isAdmin, clientUser, clientLogout, authLoading } = useClientAuth();
   const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState(new URLSearchParams(location.search).get('tab') || 'products');
+  const [activeTab, setActiveTab] = useState(new URLSearchParams(location.search).get('tab') || 'dashboard');
   const [salesView, setSalesView] = useState('pending');
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [highlightAttentionOrders, setHighlightAttentionOrders] = useState(false);
@@ -946,6 +1350,7 @@ export default function Admin() {
   const [orders, setOrders] = useState([]);
   const [messages, setMessages] = useState([]);
   const [selectedMessageThread, setSelectedMessageThread] = useState(null);
+  const [auditByOrder, setAuditByOrder] = useState({});
   
   const [stockFilter, setStockFilter] = useState('all');
   const [stockSort, setStockSort] = useState('none');
@@ -1113,14 +1518,64 @@ export default function Admin() {
 
   const handleUpdateOrderStatus = async (id, status) => {
     try {
-      await api.updateOrderStatus(id, status);
+      const currentOrder = orders.find((order) => order.id === id);
+      const previousStatus = currentOrder?.estado;
+      let reason = '';
+      let overrideReason = '';
+      if (status === 'pago_rechazado') {
+        reason = window.prompt('Motivo del rechazo del pago. El cliente podrá leerlo:')?.trim() || '';
+        if (reason.length < 5 || reason.length > 500) {
+          showFeedback('Indicá un motivo de rechazo de entre 5 y 500 caracteres.', 'error');
+          return;
+        }
+      }
+      const protectedTransition = previousStatus && isProtectedOrderTransition(previousStatus, status);
+      if (protectedTransition) {
+        overrideReason = window.prompt(`Cambio protegido: ${ORDER_STATUS_LABELS[previousStatus] || previousStatus} → ${ORDER_STATUS_LABELS[status] || status}.\nExplicá por qué se corrige este estado:`)?.trim() || '';
+        if (overrideReason.length < 10 || overrideReason.length > 500) {
+          showFeedback('Indicá un motivo de corrección de entre 10 y 500 caracteres.', 'error');
+          return;
+        }
+      }
+      const updated = await api.updateOrderStatus(id, status, reason, overrideReason);
+      const savedReason = status === 'pago_rechazado' ? (updated.pago_rechazo_motivo || reason) : '';
+      setOrders((currentOrders) => currentOrders.map((order) => (
+        order.id === id
+          ? {
+            ...order,
+            estado: status,
+            pago_rechazo_motivo: savedReason || order.pago_rechazo_motivo,
+          }
+          : order
+      )));
       showFeedback('Estado actualizado.');
-      refreshOrders();
+      api.getOrderAudit(id).then((audit) => setAuditByOrder((current) => ({ ...current, [id]: audit }))).catch(() => {});
+      api.getOrders()
+        .then((freshOrders) => {
+          setOrders(freshOrders.map((order) => (
+            order.id === id && status === 'pago_rechazado' && !order.pago_rechazo_motivo
+              ? { ...order, pago_rechazo_motivo: savedReason }
+              : order
+          )));
+        })
+        .catch((err) => {
+          console.error(err);
+          refreshOrders();
+        });
     } catch (err) { showFeedback(err.message, 'error'); }
   };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+  };
+
+  const toggleExpandedOrder = (orderId, expanded) => {
+    setExpandedOrderId(expanded ? null : orderId);
+    if (!expanded && !auditByOrder[orderId]) {
+      api.getOrderAudit(orderId)
+        .then((audit) => setAuditByOrder((current) => ({ ...current, [orderId]: audit })))
+        .catch((err) => showFeedback(err.message, 'error'));
+    }
   };
 
   if (authLoading) {
@@ -1161,6 +1616,7 @@ export default function Admin() {
   const unreadMessagesCount = messages.reduce((total, thread) => total + (thread.no_leidos ?? 0), 0);
   const stockDeactivatedOffers = offers.filter(o => o.desactivada_por_stock);
   const adminTabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'products', label: 'Productos', icon: Package },
     { id: 'offers', label: 'Ofertas', icon: Tag, badge: stockDeactivatedOffers.length || null },
     { id: 'sales', label: 'Ventas', icon: ShoppingCart, badge: pendingOrdersCount || null },
@@ -1169,6 +1625,7 @@ export default function Admin() {
   ];
   const activeSection = adminTabs.find((tab) => tab.id === activeTab) || adminTabs[0];
   const sectionDescriptions = {
+    dashboard: 'Mir? caja, ventas, pendientes y productos destacados de un vistazo.',
     products: 'Gestioná el catálogo, el stock y el orden de publicación.',
     offers: 'Creá promociones y controlá su disponibilidad.',
     sales: 'Revisá pagos y seguí todos los pedidos de la tienda.',
@@ -1306,6 +1763,10 @@ export default function Admin() {
             />
           </div>
         </div>
+      )}
+
+      {activeTab === 'dashboard' && (
+        <AdminDashboard orders={orders} onOpenSales={() => handleTabChange('sales')} />
       )}
 
       {activeTab === 'products' && (() => {
@@ -1661,15 +2122,15 @@ export default function Admin() {
             {filteredOrders.length > 0 && (
               <div id="sales-orders-table" className="scroll-mt-6 overflow-hidden border border-gray-200 bg-white shadow-xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[920px] border-collapse">
+                  <table className="w-full min-w-[1040px] border-collapse">
                     <thead className="bg-gray-50 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">
-                      <tr><th className="px-5 py-3">Pedido / fecha</th><th className="px-5 py-3">Cliente</th><th className="px-5 py-3">Productos</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Acción</th></tr>
+                      <tr><th className="px-5 py-3">Pedido / fecha</th><th className="px-5 py-3">Cliente</th><th className="px-5 py-3">Productos</th><th className="px-5 py-3">Comprobante</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Acción</th></tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {filteredOrders.map((order) => {
                         const firstItem = order.items?.[0];
-                        const statusLabel = { pendiente: 'En preparación', pendiente_pago: 'Pendiente de pago', esperando_aprobacion: 'Pago a revisar', aprobado: 'Pago aprobado', pago_rechazado: 'Pago rechazado', pago_vencido: 'Pago vencido', pago_aprobado_sin_stock: 'Pago aprobado · revisar stock', enviado: 'Enviado', completado: 'Completado' }[order.estado] || order.estado;
-                        const statusClass = ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock'].includes(order.estado) ? 'bg-red-100 text-red-800' : ['enviado', 'completado'].includes(order.estado) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900';
+                        const statusLabel = ORDER_STATUS_LABELS[order.estado] || order.estado;
+                        const statusClass = ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock'].includes(order.estado) ? 'bg-[#fee4e2] text-[#b42318]' : ['enviado', 'completado'].includes(order.estado) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900';
                         const expanded = expandedOrderId === order.id;
                         return (
                           <React.Fragment key={order.id}>
@@ -1677,16 +2138,19 @@ export default function Admin() {
                               <td className="px-5 py-4"><p className="text-sm font-black text-gray-950">#{order.id}</p><p className="mt-0.5 text-[11px] font-semibold text-gray-500">{new Date(order.fecha).toLocaleString()}</p></td>
                               <td className="px-5 py-4"><p className="text-sm font-extrabold text-gray-900">{order.cliente_nombre}</p><p className="text-[11px] font-medium text-gray-500">{order.cliente_email}</p></td>
                               <td className="px-5 py-4"><div className="flex items-center gap-3"><OrderProductThumb item={firstItem} /><div className="min-w-0"><p className="max-w-64 truncate text-xs font-extrabold text-gray-950">{firstItem ? `${firstItem.producto_nombre} × ${firstItem.cantidad}` : 'Sin detalle'}</p>{(order.items?.length || 0) > 1 && <p className="mt-1 text-[10px] font-bold text-gray-500">+ {order.items.length - 1} producto{order.items.length > 2 ? 's' : ''} más</p>}</div></div></td>
+                              <td className="px-5 py-4"><ReceiptQuickPreview order={order} onFeedback={showFeedback} /></td>
                               <td className="px-5 py-4 text-sm font-black text-gray-950">{formatPrice(order.total)}</td>
                               <td className="px-5 py-4"><span className={`inline-flex px-3 py-2 text-xs font-extrabold ${statusClass}`}>{statusLabel}</span></td>
-                              <td className="px-5 py-4"><button type="button" onClick={() => setExpandedOrderId(expanded ? null : order.id)} aria-expanded={expanded} className="inline-flex items-center gap-2 bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] transition-all duration-300 hover:bg-[#c39e22] hover:shadow-sm cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}<ArrowDown className={`h-3.5 w-3.5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} /></button></td>
+                              <td className="px-5 py-4"><button type="button" onClick={() => toggleExpandedOrder(order.id, expanded)} aria-expanded={expanded} className="inline-flex items-center gap-2 bg-[#d3ad2f] px-4 py-2 text-xs font-black text-[#352820] transition-all duration-300 hover:bg-[#c39e22] hover:shadow-sm cursor-pointer">{expanded ? 'Cerrar' : pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) ? 'Revisar pago' : 'Ver pedido'}<ArrowDown className={`h-3.5 w-3.5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} /></button></td>
                             </tr>
-                            <tr><td colSpan="6" className="bg-[#faf8f3] p-0"><div className={`grid transition-[grid-template-rows,opacity] duration-500 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}><div className="overflow-hidden">{order.estado === 'pago_aprobado_sin_stock' && <p className="mx-5 mt-5 border border-red-300 bg-red-50 p-3 text-xs font-bold text-red-900">{order.pago_rechazo_motivo}</p>}<div className="grid gap-5 px-5 py-5 lg:grid-cols-3">
+                            <tr><td colSpan="7" className="bg-[#faf8f3] p-0"><div className={`grid transition-[grid-template-rows,opacity] duration-500 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}><div className="overflow-hidden">{order.estado === 'pago_aprobado_sin_stock' && <p className="mx-5 mt-5 border border-red-300 bg-red-50 p-3 text-xs font-bold text-red-900">{order.pago_rechazo_motivo || 'Sin descripcion'}</p>}{order.estado === 'pago_rechazado' && <div className="mx-5 mt-5 border border-red-200 bg-red-50 p-3 text-xs text-red-950"><p className="mb-1 font-black uppercase tracking-wider">Motivo del rechazo</p><p className="font-semibold leading-relaxed">{order.pago_rechazo_motivo || 'Sin descripcion'}</p></div>}<div className="grid gap-5 px-5 py-5 lg:grid-cols-3">
                                 {pendingReceiptOrders.some((pendingOrder) => pendingOrder.id === order.id) && <div className="lg:col-span-3"><ReceiptReviewCard order={order} onFeedback={showFeedback} onUpdated={refreshOrders} compact /></div>}
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Entrega</p><div className="space-y-1 text-xs font-semibold text-gray-700">{order.entrega_nombre && <p><strong>Recibe:</strong> {order.entrega_nombre}</p>}{order.entrega_telefono && <p><strong>Teléfono:</strong> {order.entrega_telefono}</p>}{order.entrega_direccion && <p><strong>Dirección:</strong> {order.entrega_direccion}</p>}{order.envio_localidad && <p><strong>Destino:</strong> {order.envio_localidad}, {order.envio_provincia}</p>}</div></div>
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 text-xs"><div className="flex min-w-0 items-center gap-2"><OrderProductThumb item={item} size="sm" /><span className="truncate font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span></div><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
-                                <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]"><option value="pendiente">Pendiente</option><option value="pendiente_pago">Pendiente de pago</option><option value="esperando_aprobacion">Comprobante pendiente de aprobación</option><option value="aprobado">Pago aprobado</option><option value="pago_rechazado">Pago rechazado</option><option value="pago_vencido">Pago vencido</option><option value="pago_aprobado_sin_stock">Pago aprobado · falta stock</option><option value="enviado">Enviado</option><option value="completado">Completado</option></select></div>
-                              </div></div></div></td></tr>
+                                <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]">{getOrderStatusChoices(order.estado).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><p className="mt-2 text-[10px] font-bold text-gray-500">Si hay una correccion sensible, se pide motivo antes de guardar.</p></div>
+                              </div>
+                              {auditByOrder[order.id]?.[0] && <div className="mx-5 mb-5 inline-flex max-w-full items-start gap-2 border border-[#eadfca] bg-white px-3 py-2 text-xs text-gray-700"><Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#b89420]" /><span><strong className="text-[#352820]">{auditByOrder[order.id][0].actor_nombre || auditByOrder[order.id][0].actor_email || 'Admin'}</strong> {getAuditActionLabel(auditByOrder[order.id][0].accion)} de <strong>{ORDER_STATUS_LABELS[auditByOrder[order.id][0].estado_anterior] || auditByOrder[order.id][0].estado_anterior || 'Sin estado'}</strong> a <strong>{ORDER_STATUS_LABELS[auditByOrder[order.id][0].estado_nuevo] || auditByOrder[order.id][0].estado_nuevo || 'Sin estado'}</strong> el {new Date(auditByOrder[order.id][0].fecha).toLocaleString('es-AR')}</span></div>}
+                            </div></div></td></tr>
                           </React.Fragment>
                         );
                       })}
