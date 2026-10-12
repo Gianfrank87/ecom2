@@ -133,7 +133,7 @@ export default function Navbar() {
     setIsSearchExpanded(false);
   };
 
-  const totalAdminNotifications = adminNotifications.sales + adminNotifications.messages;
+  const notificationCount = isAdmin ? adminNotifications.sales + adminNotifications.messages : unreadMessages;
 
   const handleLogout = () => {
     clientLogout();
@@ -352,12 +352,12 @@ export default function Navbar() {
                   <User className="w-5 h-5 stroke-[1.5]" />
 
                   {/* Notification Badge */}
-                  {totalAdminNotifications > 0 && (
+                  {notificationCount > 0 && (
                     <span
                       className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-none bg-[#352820] text-[#f0dc78] text-[8px] font-black flex items-center justify-center border border-[#d3ad2f]"
-                      aria-label={`${totalAdminNotifications} notificaciones pendientes`}
+                      aria-label={`${notificationCount} notificaciones pendientes`}
                     >
-                      {totalAdminNotifications}
+                      {notificationCount}
                     </span>
                   )}
                 </button>

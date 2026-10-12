@@ -2,7 +2,7 @@
 
 Ultima actualizacion: 2026-09-27.
 
-NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + PostgreSQL. La marca visible es NigDiz, aunque todavia quedan nombres historicos internos como `huellitas_*`, `huellitas-server` y algunos textos heredados en codigo o localStorage.
+NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + PostgreSQL. La marca visible y los paquetes internos activos usan NigDiz. Las claves historicas de localStorage se migran automaticamente a `nigdiz_*` y se eliminan en el navegador del usuario.
 
 Este archivo resume el estado real del repo y debe mantenerse como guia operativa para futuras sesiones de trabajo.
 
@@ -75,15 +75,15 @@ Tablas principales:
 - `server/migrate-offers-columns.js`
 - `server/migrate-categories.js`
 
-No ejecutar migraciones ni scripts de datos contra produccion sin confirmar el destino. `migrar-datos.js` y scripts de limpieza pueden borrar datos.
+No ejecutar migraciones ni scripts de datos contra produccion sin confirmar el destino. No hay scripts destructivos de limpieza o migracion SQLite en el flujo activo. Si se necesita una migracion de datos nueva, crearla con nombre explicito, dry-run y confirmacion del destino.
 
 ## Autenticacion y roles
 
 - Login unico en `/login`, usando `POST /api/clients/login`.
 - Los clientes nuevos se registran con rol `cliente`.
 - El rol `admin` se lee del JWT y protege endpoints administrativos.
-- El token se guarda en `localStorage` con la clave historica `huellitas_client_token`.
-- El carrito se guarda en `localStorage` con la clave historica `huellitas_cart`.
+- El token se guarda en `localStorage` con la clave `nigdiz_client_token`.
+- El carrito se guarda en `localStorage` con la clave `nigdiz_cart`.
 - No documentar credenciales reales ni superusuarios en el repo.
 
 ## API backend
@@ -256,7 +256,7 @@ Al registrarse un cliente, `sendWelcomeEmail` corre en segundo plano:
 - Si `SMTP_PASS` empieza con `re_`, usa la API HTTP de Resend.
 - Si no, usa SMTP con `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 
-Hay textos internos heredados de Huellitas en el template. Revisar antes de activar email real de marca.
+El template de bienvenida debe mantenerse con branding NigDiz y paleta de la marca.
 
 ## Checklist de mejoras
 
@@ -294,15 +294,15 @@ Hay textos internos heredados de Huellitas en el template. Revisar antes de acti
 
 ### 5. Emails
 
-- [ ] Limpiar branding heredado de Huellitas en los templates.
+- [x] Limpiar branding heredado de la marca anterior en los templates.
 - [ ] Activar y probar el proveedor real Resend/SMTP.
-- [ ] Incorporar datos de tienda configurables en los emails.
+- [x] Incorporar datos de tienda configurables en los emails.
 
 ### 6. Limpieza tecnica y visual
 
-- [ ] Revisar nombres internos heredados de Huellitas en codigo, paquetes y localStorage.
+- [x] Revisar nombres internos heredados de la marca anterior en codigo, paquetes y localStorage.
 - [ ] Revisar colores rojos heredados puntuales para alinear completamente la UI con NigDiz.
-- [ ] Resolver advertencias actuales de lint.
+- [x] Resolver advertencias actuales de lint.
 - [ ] Dividir el bundle principal cuando el crecimiento de la aplicacion lo justifique.
 
 ### 7. Envios reales

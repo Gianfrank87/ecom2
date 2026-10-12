@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useClientAuth } from '../context/ClientAuthContext';
 import { useCart } from '../context/CartContext';
@@ -135,7 +135,7 @@ function MessageThread({ order, onClose }) {
   const [error, setError] = useState('');
   const [closed, setClosed] = useState(Boolean(order.hilo_cerrado));
 
-  const loadMessages = () => {
+  const loadMessages = useCallback(() => {
     setLoading(true);
     api.getOrderMessages(order.id)
       .then((data) => {
@@ -146,11 +146,11 @@ function MessageThread({ order, onClose }) {
       .then(() => window.dispatchEvent(new Event('messages-read')))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  };
+  }, [order.id]);
 
   useEffect(() => {
     loadMessages();
-  }, [order.id]);
+  }, [loadMessages]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();

@@ -29,8 +29,8 @@ try {
   for (const width of (process.argv[3]?.split(',').map(Number) || [320, 375, 390, 430, 768, 1024, 1440])) {
     const context = await browser.newContext({ viewport: { width, height: 844 } });
     await context.addInitScript(({ products }) => {
-      localStorage.setItem('huellitas_client_token', 'responsive-fixture');
-      localStorage.setItem('huellitas_cart', JSON.stringify([{ ...products[0], quantity: 2 }]));
+      localStorage.setItem('nigdiz_client_token', 'responsive-fixture');
+      localStorage.setItem('nigdiz_cart', JSON.stringify([{ ...products[0], quantity: 2 }]));
     }, { products });
     await context.route('**/api/**', route => {
       const url = new URL(route.request().url());

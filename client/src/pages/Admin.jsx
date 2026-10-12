@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck, Trash2, Edit2, LogOut, FileText, CheckCircle, XCircle, Package, Tag, ShoppingCart, Calendar, Clock, Truck, GripVertical, X, Plus, Minus, AlertTriangle, MessageCircle, Send, ArrowDown, ArrowUp, Menu, Settings, ExternalLink, UserRound } from 'lucide-react';
 import {
   DndContext,
@@ -26,6 +26,7 @@ const formatPrice = (value) =>
 
 // ─────────────── PRODUCT FORM ───────────────
 const EMPTY_PRODUCT_FORM = { name: '', category: 'alimentos', price: '', description: '', stock: '', featured: false };
+const EMPTY_OFFER_FORM = { nombre: '', producto_ids: [], descuento_o_precio_paquete: '', tipo_descuento: 'precio_paquete', prioridad: 0, activa: true };
 function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
   const [formData, setFormData] = useState(EMPTY_PRODUCT_FORM);
   const [imageUrls, setImageUrls] = useState(['']);
@@ -202,8 +203,7 @@ function ProductForm({ editProduct, onSaved, onCancel, showFeedback }) {
 
 // ─────────────── OFFER FORM ───────────────
 function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback, onStockWarning }) {
-  const EMPTY = { nombre: '', producto_ids: [], descuento_o_precio_paquete: '', tipo_descuento: 'precio_paquete', prioridad: 0, activa: true };
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState(EMPTY_OFFER_FORM);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -217,7 +217,7 @@ function OfferForm({ editOffer, products, onSaved, onCancel, showFeedback, onSto
         activa: Boolean(editOffer.activa)
       });
     } else {
-      setForm(EMPTY);
+      setForm(EMPTY_OFFER_FORM);
     }
   }, [editOffer]);
 
@@ -630,7 +630,7 @@ function PaymentConfigForm({ showFeedback }) {
     refresh();
     window.addEventListener('bank-config-updated', refresh);
     return () => window.removeEventListener('bank-config-updated', refresh);
-  }, []);
+  }, [showFeedback]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -773,6 +773,11 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated, compact = false }) {
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const closePreview = useCallback(() => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  }, [preview]);
+
   useEffect(() => {
     if (!preview) return undefined;
     const previousOverflow = document.body.style.overflow;
@@ -786,12 +791,7 @@ function ReceiptReviewCard({ order, onFeedback, onUpdated, compact = false }) {
       window.removeEventListener('keydown', handleEscape);
       URL.revokeObjectURL(preview.url);
     };
-  }, [preview]);
-
-  const closePreview = () => {
-    if (preview?.url) URL.revokeObjectURL(preview.url);
-    setPreview(null);
-  };
+  }, [closePreview, preview]);
 
   const openReceiptPreview = async () => {
     if (previewLoading) return;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Sparkles, BookOpen, X, Quote } from 'lucide-react';
+import { Heart, Sparkles, BookOpen, X } from 'lucide-react';
 
 export default function AboutNigdizSection() {
   const [isModalOpen, setIsModalOpen] = useState(false);

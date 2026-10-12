@@ -1,4 +1,38 @@
 import nodemailer from 'nodemailer';
+import { dbGet } from '../db.js';
+
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const getConfiguredStore = async () => {
+  const defaults = {
+    name: process.env.STORE_NAME || 'NigDiz',
+    contactEmail: '',
+    instagramUrl: '',
+    footerText: 'Productos pensados para la seguridad, comodidad y felicidad de tus mascotas.',
+  };
+
+  try {
+    const keys = {
+      name: 'tienda_nombre',
+      contactEmail: 'tienda_email_contacto',
+      instagramUrl: 'tienda_instagram_url',
+      footerText: 'tienda_footer_texto',
+    };
+    const entries = await Promise.all(Object.entries(keys).map(async ([field, key]) => {
+      const row = await dbGet('SELECT valor FROM configuraciones WHERE clave = ?', [key]);
+      return [field, row?.valor || defaults[field]];
+    }));
+    return { ...defaults, ...Object.fromEntries(entries) };
+  } catch (error) {
+    console.warn('[MAILER] No se pudo leer la configuración de tienda:', error.message);
+    return defaults;
+  }
+};
 
 /**
  * Send welcome email to a newly registered client
@@ -10,13 +44,19 @@ export async function sendWelcomeEmail({ email, name }) {
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
 
-    const storeName = process.env.STORE_NAME || 'NigDiz';
+    const store = await getConfiguredStore();
+    const storeDisplayName = store.name;
+    const storeName = escapeHtml(storeDisplayName);
+    const clientName = escapeHtml(name);
+    const footerText = escapeHtml(store.footerText);
+    const contactEmail = escapeHtml(store.contactEmail);
+    const instagramUrl = String(store.instagramUrl || '').startsWith('https://') ? store.instagramUrl : '';
     const fromAddress = process.env.SMTP_FROM || `NigDiz <onboarding@resend.dev>`;
 
     if (!pass || pass.includes('tu_api_key_aqui')) {
       console.log('--- [MAILER DEV SIMULATION] ---');
       console.log(`To: ${email}`);
-      console.log(`Subject: ¡Bienvenido/a a ${storeName}! 🎉`);
+      console.log(`Subject: ¡Bienvenido/a a ${storeDisplayName}!`);
       console.log('Motivo: Clave SMTP_PASS no configurada en .env');
       console.log('-------------------------------');
       return;
@@ -28,16 +68,16 @@ export async function sendWelcomeEmail({ email, name }) {
       <head>
         <meta charset="UTF-8">
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
-          .card { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-          .header { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
-          .header h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4fbfd; margin: 0; padding: 20px; color: #352820; }
+          .card { max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #f0dc78; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(53,40,32,0.06); }
+          .header { background: #352820; padding: 32px 24px; text-align: center; color: #f0dc78; }
+          .header h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
           .body { padding: 32px 24px; line-height: 1.6; }
-          .welcome-title { font-size: 20px; font-weight: 600; color: #1e293b; margin-top: 0; }
-          .highlight-box { background: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; margin: 24px 0; border-radius: 4px; }
+          .welcome-title { font-size: 20px; font-weight: 700; color: #352820; margin-top: 0; }
+          .highlight-box { background: #fff9e6; border-left: 4px solid #d3ad2f; padding: 16px; margin: 24px 0; border-radius: 4px; }
           .button-container { text-align: center; margin: 32px 0 16px 0; }
-          .btn { background-color: #4f46e5; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 15px; }
-          .footer { background: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+          .btn { background-color: #d3ad2f; color: #352820 !important; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 800; display: inline-block; font-size: 15px; }
+          .footer { background: #f4fbfd; padding: 20px; text-align: center; font-size: 12px; color: #4b382b; border-top: 1px solid #f0dc78; }
         </style>
       </head>
       <body>
@@ -46,18 +86,21 @@ export async function sendWelcomeEmail({ email, name }) {
             <h1>¡Te damos la bienvenida a ${storeName}! 🐾</h1>
           </div>
           <div class="body">
-            <h2 class="welcome-title">¡Hola, ${name}!</h2>
+            <h2 class="welcome-title">¡Hola, ${clientName}!</h2>
             <p>Estamos muy felices de que te hayas unido a nuestra comunidad. Tu cuenta ha sido creada exitosamente y ya puedes acceder a todos nuestros productos y servicios.</p>
             
             <div class="highlight-box">
-              <strong style="color: #15803d;">¡Tu cuenta ya está lista!</strong>
-              <p style="margin: 4px 0 0 0; font-size: 14px; color: #166534;">Puedes explorar nuestro catálogo, guardar tus favoritos y realizar tus compras de forma rápida y segura.</p>
+              <strong style="color: #705812;">¡Tu cuenta ya está lista!</strong>
+              <p style="margin: 4px 0 0 0; font-size: 14px; color: #4b382b;">Podés explorar nuestro catálogo y realizar tus compras de forma rápida y segura.</p>
             </div>
 
             <div class="button-container">
               <a href="${process.env.FRONTEND_URL || '#'}" class="btn">Ir a la Tienda</a>
             </div>
 
+            <p style="font-size: 13px; color: #4b382b;">${footerText}</p>
+            ${contactEmail ? `<p style="font-size: 13px; color: #4b382b;">Contacto: ${contactEmail}</p>` : ''}
+            ${instagramUrl ? `<p style="font-size: 13px;"><a style="color: #947516;" href="${instagramUrl}">Instagram de ${storeName}</a></p>` : ''}
             <p style="font-size: 13px; color: #64748b;">Si no realizaste este registro, por favor ignora este correo.</p>
           </div>
           <div class="footer">
@@ -79,7 +122,7 @@ export async function sendWelcomeEmail({ email, name }) {
         body: JSON.stringify({
           from: fromAddress,
           to: [email],
-          subject: `¡Bienvenido/a a ${storeName}! 🎉`,
+          subject: `¡Bienvenido/a a ${storeDisplayName}!`,
           html: htmlContent
         })
       });
@@ -106,7 +149,7 @@ export async function sendWelcomeEmail({ email, name }) {
     const info = await transporter.sendMail({
       from: fromAddress,
       to: email,
-      subject: `¡Bienvenido/a a ${storeName}! 🎉`,
+      subject: `¡Bienvenido/a a ${storeDisplayName}!`,
       html: htmlContent
     });
 

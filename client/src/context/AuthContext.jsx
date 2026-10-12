@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { readStoredValue, removeStoredValue, writeStoredValue } from '../config/storageKeys';
 
 const AuthContext = createContext();
 
@@ -16,7 +17,7 @@ export const AuthProvider = ({ children }) => {
 
   // On mount: restore token from localStorage and verify it
   useEffect(() => {
-    const saved = localStorage.getItem('huellitas_admin_token');
+    const saved = readStoredValue('adminToken');
     if (saved) {
       api.verifyAdmin(saved)
         .then(() => {
@@ -24,7 +25,7 @@ export const AuthProvider = ({ children }) => {
           setIsAdmin(true);
         })
         .catch(() => {
-          localStorage.removeItem('huellitas_admin_token');
+          removeStoredValue('adminToken');
         })
         .finally(() => setAuthLoading(false));
     } else {
@@ -33,13 +34,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const adminLogin = (token) => {
-    localStorage.setItem('huellitas_admin_token', token);
+    writeStoredValue('adminToken', token);
     setAdminToken(token);
     setIsAdmin(true);
   };
 
   const adminLogout = () => {
-    localStorage.removeItem('huellitas_admin_token');
+    removeStoredValue('adminToken');
     setAdminToken(null);
     setIsAdmin(false);
   };

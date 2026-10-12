@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Trash2, Plus, Minus, ArrowLeft, CheckCircle2, AlertCircle, Truck, Search, MapPin, RotateCcw, Loader2 } from 'lucide-react';
 
@@ -44,14 +44,14 @@ export default function Cart() {
       .finally(() => setBankConfigLoading(false));
   }, []);
 
-  const paymentOptions = [
+  const paymentOptions = useMemo(() => [
     { id: 'transferencia', title: 'Transferencia', detail: paymentConfig.transferInstructions },
     { id: 'efectivo', title: 'Efectivo', detail: paymentConfig.cashInstructions },
     { id: 'mercadopago', title: 'Mercado Pago', detail: 'Pago seguro desde Mercado Pago.' },
   ].map((method) => ({
     ...method,
     available: !paymentConfigLoading && !paymentConfigError && Boolean(paymentConfig[`${method.id}Enabled`]),
-  }));
+  })), [paymentConfig, paymentConfigError, paymentConfigLoading]);
 
   useEffect(() => {
     if (paymentConfigLoading || bankConfigLoading || paymentConfigError) return;
@@ -60,7 +60,7 @@ export default function Cart() {
       const available = paymentOptions.find((method) => method.available);
       if (available) setPaymentMethod(available.id);
     }
-  }, [paymentConfig, paymentConfigLoading, paymentConfigError, bankConfig, bankConfigLoading, bankConfigError, paymentMethod]);
+  }, [paymentConfigError, paymentConfigLoading, bankConfigLoading, paymentOptions, paymentMethod]);
 
   // Checkout Form State
   const [formData, setFormData] = useState({
@@ -271,7 +271,7 @@ export default function Cart() {
               ¡Pedido recibido con éxito!
             </h1>
             <p className="text-sm text-gray-500 max-w-md mx-auto">
-              Muchas gracias por comprar en Huellitas & Cía. {paymentMethod === 'transferencia' ? 'Completá el pago y subí tu comprobante para que podamos revisarlo.' : 'Tu pedido ha sido procesado exitosamente.'}
+              Muchas gracias por comprar en NigDiz. {paymentMethod === 'transferencia' ? 'Completá el pago y subí tu comprobante para que podamos revisarlo.' : 'Tu pedido ha sido procesado exitosamente.'}
             </p>
           </div>
 
@@ -696,7 +696,7 @@ export default function Cart() {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  placeholder="laura@ejemplo.com"
+                  placeholder="cliente@nigdiz.com"
                   className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#e52521] text-xs font-semibold text-gray-900 transition-all ${formErrors.email ? 'border-red-400 focus:ring-red-400' : 'border-gray-200'
                     }`}
                 />

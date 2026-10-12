@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { readStoredValue, removeStoredValue, writeStoredValue } from '../config/storageKeys';
 
 const ClientAuthContext = createContext();
 
@@ -16,8 +17,8 @@ export const ClientAuthProvider = ({ children }) => {
 
   // On mount: restore token from localStorage and verify it
   useEffect(() => {
-    localStorage.removeItem('huellitas_admin_token');
-    const saved = localStorage.getItem('huellitas_client_token');
+    removeStoredValue('adminToken');
+    const saved = readStoredValue('clientToken');
     if (saved) {
       api.verifyClient(saved)
         .then((data) => {
@@ -25,7 +26,7 @@ export const ClientAuthProvider = ({ children }) => {
           setClientUser(data.user);
         })
         .catch(() => {
-          localStorage.removeItem('huellitas_client_token');
+          removeStoredValue('clientToken');
         })
         .finally(() => setAuthLoading(false));
     } else {
@@ -34,13 +35,13 @@ export const ClientAuthProvider = ({ children }) => {
   }, []);
 
   const clientLogin = (token, user) => {
-    localStorage.setItem('huellitas_client_token', token);
+    writeStoredValue('clientToken', token);
     setClientToken(token);
     setClientUser(user);
   };
 
   const clientLogout = () => {
-    localStorage.removeItem('huellitas_client_token');
+    removeStoredValue('clientToken');
     setClientToken(null);
     setClientUser(null);
   };

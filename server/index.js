@@ -160,21 +160,35 @@ const removeStoredReceipt = async (reference) => {
   await removeLocalReceipt(reference);
 };
 
+const parseOriginList = (value = '') => String(value)
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+const allowedOrigins = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  ...parseOriginList(process.env.CLIENT_URL),
+  ...parseOriginList(process.env.CORS_ORIGIN),
+  ...parseOriginList(process.env.CORS_ORIGINS),
+]);
+
 app.disable('x-powered-by');
 
 // Enable CORS and JSON parsing
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://ecomlau-mauve.vercel.app',
-    'https://ecommercelaura.onrender.com'
-  ],
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (origin && allowedOrigins.has(origin.replace(/\/$/, ''))) return callback(null, true);
+    return callback(new Error('Origen no permitido por CORS.'));
+  },
   credentials: true,
 }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
 app.use(express.json({ limit: '1mb' }));

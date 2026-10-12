@@ -52,4 +52,4 @@ En un teléfono conectado al mismo Wi-Fi, abrir `http://IP-DE-LA-PC:5173` con la
 
 Al preparar este entorno no había archivos `.env` con los valores remotos en este checkout. Esos valores no se inventaron ni se reemplazaron: siguen siendo responsabilidad de la configuración existente del hosting. Para ejecutar **desde esta PC** contra la base remota, primero recuperar esos valores del hosting en archivos ignorados por Git; eso es distinto de probar con la base local.
 
-Si se pide “volver a producción antes de subir”, seguir esta sección, conservar la configuración del hosting y verificar el build. No migrar la base local hacia producción ni ejecutar `migrar-datos.js`: ese script contiene un vaciado de tablas del destino.
+Si se pide “volver a producción antes de subir”, seguir esta sección, conservar la configuración del hosting y verificar el build. No migrar la base local hacia producción ni ejecutar scripts de datos sin confirmar explícitamente el destino.

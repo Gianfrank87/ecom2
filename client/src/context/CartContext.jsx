@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { readStoredValue, writeStoredValue } from '../config/storageKeys';
 
 const CartContext = createContext();
 
@@ -13,7 +14,7 @@ export const useCart = () => {
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState(() => {
     try {
-      const savedCart = localStorage.getItem('huellitas_cart');
+      const savedCart = readStoredValue('cart');
       return savedCart ? JSON.parse(savedCart) : [];
     } catch (error) {
       console.error('Error loading cart from localStorage', error);
@@ -26,7 +27,7 @@ export const CartProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      localStorage.setItem('huellitas_cart', JSON.stringify(cart));
+      writeStoredValue('cart', JSON.stringify(cart));
     } catch (error) {
       console.error('Error saving cart to localStorage', error);
     }

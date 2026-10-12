@@ -91,17 +91,14 @@ try {
   await db.query(fs.readFileSync(path.join(root, 'server/local/schema.sql'), 'utf8'));
   const seeded = (await db.query("SELECT 1 FROM configuraciones WHERE clave = 'local_seed_v1'")).rowCount;
   if (!seeded) {
-    const { DatabaseSync } = await import('node:sqlite');
-    const source = new DatabaseSync(path.join(root, 'server/database.db'), { readOnly: true });
-    let products;
-    try { products = source.prepare('SELECT * FROM productos ORDER BY id').all(); } finally { source.close(); }
-    for (const category of new Set(['collares', 'correas', 'alimentos', 'juguetes', 'consejos', ...products.map(p => p.categoria)])) {
+    const products = JSON.parse(fs.readFileSync(path.join(root, 'client/src/data/products.json'), 'utf8'));
+    for (const category of new Set(['collares', 'correas', 'alimentos', 'juguetes', 'consejos', ...products.map(p => p.category)])) {
       await db.query('INSERT INTO categorias(nombre) VALUES ($1) ON CONFLICT DO NOTHING', [category]);
     }
     for (const p of products) {
       await db.query(`INSERT INTO productos(id,nombre,descripcion,precio,stock,categoria,imagen_url,activo,destacado,orden)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING`,
-      [p.id, p.nombre, p.descripcion, p.precio, p.stock, p.categoria, p.imagen_url, Boolean(p.activo), Boolean(p.destacado), p.orden ?? p.id]);
+      [p.id, p.name, p.description, p.price, p.stock, p.category, p.image, true, Boolean(p.featured), Number(p.id)]);
     }
     await db.query("SELECT setval(pg_get_serial_sequence('productos','id'), COALESCE(MAX(id),1), COUNT(*) > 0) FROM productos");
     const bcrypt = requireServer('bcryptjs');
@@ -115,7 +112,7 @@ try {
     for (const [key, value] of [['banco_alias', 'PRUEBA.LOCAL.NO.TRANSFERIR'], ['banco_cbu', '0000000000000000000000'], ['banco_titular', 'ENTORNO DE PRUEBAS'], ['local_seed_v1', '1']]) {
       await db.query('INSERT INTO configuraciones(clave,valor) VALUES ($1,$2) ON CONFLICT DO NOTHING', [key, value]);
     }
-    console.log(`Importados ${products.length} productos de SQLite. Creadas dos cuentas de prueba.`);
+    console.log(`Importados ${products.length} productos de ejemplo. Creadas dos cuentas de prueba.`);
   }
   await db.query('COMMIT');
 } catch (error) {
