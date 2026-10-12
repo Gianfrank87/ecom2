@@ -177,18 +177,6 @@ const ORDER_STATUS_OPTIONS = [
   ['completado', 'Completado'],
 ];
 const PROTECTED_ORDER_STATUSES = ['pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'completado'];
-const NORMAL_ORDER_TRANSITIONS = {
-  pendiente: ['enviado', 'pago_rechazado'],
-  aprobado: ['enviado', 'pago_rechazado'],
-  esperando_aprobacion: ['pago_rechazado'],
-  enviado: ['completado'],
-  pendiente_pago: ['pendiente_pago'],
-  pago_rechazado: [],
-  pago_vencido: [],
-  pago_aprobado_sin_stock: [],
-  completado: [],
-};
-
 const isProtectedOrderTransition = (fromStatus, toStatus) => (
   fromStatus !== toStatus
   && (
@@ -198,11 +186,7 @@ const isProtectedOrderTransition = (fromStatus, toStatus) => (
   )
 );
 
-const getOrderStatusChoices = (status) => {
-  const allowed = new Set([status, ...(NORMAL_ORDER_TRANSITIONS[status] || [])]);
-  if (PROTECTED_ORDER_STATUSES.includes(status)) allowed.add('pendiente');
-  return ORDER_STATUS_OPTIONS.filter(([value]) => allowed.has(value));
-};
+const getOrderStatusChoices = () => ORDER_STATUS_OPTIONS;
 
 const getAuditActionLabel = (action) => ({
   cambio_estado: 'actualizó el estado',
