@@ -1335,6 +1335,8 @@ export default function Admin() {
   const [messages, setMessages] = useState([]);
   const [selectedMessageThread, setSelectedMessageThread] = useState(null);
   const [auditByOrder, setAuditByOrder] = useState({});
+  const [expandedAuditOrderId, setExpandedAuditOrderId] = useState(null);
+  const [statusChangeDraft, setStatusChangeDraft] = useState(null);
   
   const [stockFilter, setStockFilter] = useState('all');
   const [stockSort, setStockSort] = useState('none');
@@ -1500,27 +1502,8 @@ export default function Admin() {
     } catch (err) { showFeedback(err.message, 'error'); }
   };
 
-  const handleUpdateOrderStatus = async (id, status) => {
+  const applyOrderStatusChange = async ({ id, status, reason = '', overrideReason = '' }) => {
     try {
-      const currentOrder = orders.find((order) => order.id === id);
-      const previousStatus = currentOrder?.estado;
-      let reason = '';
-      let overrideReason = '';
-      if (status === 'pago_rechazado') {
-        reason = window.prompt('Motivo del rechazo del pago. El cliente podrá leerlo:')?.trim() || '';
-        if (reason.length < 5 || reason.length > 500) {
-          showFeedback('Indicá un motivo de rechazo de entre 5 y 500 caracteres.', 'error');
-          return;
-        }
-      }
-      const protectedTransition = previousStatus && isProtectedOrderTransition(previousStatus, status);
-      if (protectedTransition) {
-        overrideReason = window.prompt(`Cambio protegido: ${ORDER_STATUS_LABELS[previousStatus] || previousStatus} → ${ORDER_STATUS_LABELS[status] || status}.\nExplicá por qué se corrige este estado:`)?.trim() || '';
-        if (overrideReason.length < 10 || overrideReason.length > 500) {
-          showFeedback('Indicá un motivo de corrección de entre 10 y 500 caracteres.', 'error');
-          return;
-        }
-      }
       const updated = await api.updateOrderStatus(id, status, reason, overrideReason);
       const savedReason = status === 'pago_rechazado' ? (updated.pago_rechazo_motivo || reason) : '';
       setOrders((currentOrders) => currentOrders.map((order) => (
@@ -1547,6 +1530,51 @@ export default function Admin() {
           refreshOrders();
         });
     } catch (err) { showFeedback(err.message, 'error'); }
+  };
+
+  const handleUpdateOrderStatus = async (id, status) => {
+    const currentOrder = orders.find((order) => order.id === id);
+    const previousStatus = currentOrder?.estado;
+    if (status === previousStatus) return;
+
+    const needsRejectionReason = status === 'pago_rechazado';
+    const protectedTransition = previousStatus && isProtectedOrderTransition(previousStatus, status);
+    if (needsRejectionReason || protectedTransition) {
+      setStatusChangeDraft({
+        id,
+        status,
+        previousStatus,
+        reason: '',
+        overrideReason: '',
+        needsRejectionReason,
+        protectedTransition,
+      });
+      return;
+    }
+
+    await applyOrderStatusChange({ id, status });
+  };
+
+  const confirmStatusChangeDraft = async () => {
+    if (!statusChangeDraft) return;
+    const reason = statusChangeDraft.reason.trim();
+    const overrideReason = statusChangeDraft.overrideReason.trim();
+    if (statusChangeDraft.needsRejectionReason && (reason.length < 5 || reason.length > 500)) {
+      showFeedback('Indica un motivo de rechazo de entre 5 y 500 caracteres.', 'error');
+      return;
+    }
+    if (statusChangeDraft.protectedTransition && (overrideReason.length < 10 || overrideReason.length > 500)) {
+      showFeedback('Indica un motivo de correccion de entre 10 y 500 caracteres.', 'error');
+      return;
+    }
+    const draft = statusChangeDraft;
+    setStatusChangeDraft(null);
+    await applyOrderStatusChange({
+      id: draft.id,
+      status: draft.status,
+      reason,
+      overrideReason,
+    });
   };
 
   const handleTabChange = (tab) => {
@@ -1703,6 +1731,62 @@ export default function Admin() {
             <div className="flex justify-end gap-2 mt-6">
               <button type="button" onClick={() => setStockWarning(null)} className="px-4 py-2.5 rounded-none border border-gray-300 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold cursor-pointer">Cancelar</button>
               <button type="button" onClick={() => { const confirm = stockWarning.onConfirm; setStockWarning(null); confirm(); }} className="px-4 py-2.5 rounded-none bg-[#352820] hover:bg-[#4b382b] text-[#f0dc78] text-xs font-black cursor-pointer">Activar igual</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {statusChangeDraft && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg border border-[#352820] bg-white p-6 text-left shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#eadfca] bg-[#fff7df] text-[#947516]">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-gray-500">Confirmar cambio de estado</p>
+                <h2 className="mt-1 text-lg font-black text-[#352820]">
+                  {ORDER_STATUS_LABELS[statusChangeDraft.previousStatus] || statusChangeDraft.previousStatus} → {ORDER_STATUS_LABELS[statusChangeDraft.status] || statusChangeDraft.status}
+                </h2>
+                <p className="mt-2 text-sm font-semibold text-gray-600">Este cambio necesita una explicación para evitar errores y dejar registro.</p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {statusChangeDraft.needsRejectionReason && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-black text-[#352820]">Motivo del rechazo que verá el cliente</label>
+                  <textarea
+                    value={statusChangeDraft.reason}
+                    onChange={(event) => setStatusChangeDraft((draft) => ({ ...draft, reason: event.target.value }))}
+                    rows="3"
+                    maxLength="500"
+                    className="w-full resize-y border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#352820]"
+                    placeholder="Ej.: El comprobante no permite verificar el pago."
+                  />
+                  <p className="mt-1 text-[11px] font-semibold text-gray-500">Entre 5 y 500 caracteres.</p>
+                </div>
+              )}
+
+              {statusChangeDraft.protectedTransition && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-black text-[#352820]">Motivo interno de corrección</label>
+                  <textarea
+                    value={statusChangeDraft.overrideReason}
+                    onChange={(event) => setStatusChangeDraft((draft) => ({ ...draft, overrideReason: event.target.value }))}
+                    rows="3"
+                    maxLength="500"
+                    className="w-full resize-y border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#352820]"
+                    placeholder="Ej.: Se corrigió porque el pago fue verificado manualmente."
+                  />
+                  <p className="mt-1 text-[11px] font-semibold text-gray-500">Este texto queda en el historial interno.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setStatusChangeDraft(null)} className="border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">Cancelar</button>
+              <button type="button" onClick={confirmStatusChangeDraft} className="bg-[#352820] px-4 py-2 text-xs font-black text-[#f0dc78] hover:bg-[#4b382b] cursor-pointer">Guardar cambio</button>
             </div>
           </div>
         </div>
@@ -2133,7 +2217,18 @@ export default function Admin() {
                                 <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">Productos</p><div className="space-y-2">{order.items?.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 text-xs"><div className="flex min-w-0 items-center gap-2"><OrderProductThumb item={item} size="sm" /><span className="truncate font-bold text-gray-800">{item.cantidad}× {item.producto_nombre}</span></div><span className="shrink-0 font-black">{formatPrice(item.precio_unitario)}</span></div>)}</div></div>
                                 <div><label className="mb-2 block text-[10px] font-black uppercase tracking-wider text-gray-500">Actualizar estado</label><select value={order.estado} onChange={(event) => handleUpdateOrderStatus(order.id, event.target.value)} className="w-full border border-gray-300 bg-white px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#352820]">{getOrderStatusChoices(order.estado).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><p className="mt-2 text-[10px] font-bold text-gray-500">Si hay una correccion sensible, se pide motivo antes de guardar.</p></div>
                               </div>
-                              {auditByOrder[order.id]?.[0] && <div className="mx-5 mb-5 inline-flex max-w-full items-start gap-2 border border-[#eadfca] bg-white px-3 py-2 text-xs text-gray-700"><Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#b89420]" /><span><strong className="text-[#352820]">{auditByOrder[order.id][0].actor_nombre || auditByOrder[order.id][0].actor_email || 'Admin'}</strong> {getAuditActionLabel(auditByOrder[order.id][0].accion)} de <strong>{ORDER_STATUS_LABELS[auditByOrder[order.id][0].estado_anterior] || auditByOrder[order.id][0].estado_anterior || 'Sin estado'}</strong> a <strong>{ORDER_STATUS_LABELS[auditByOrder[order.id][0].estado_nuevo] || auditByOrder[order.id][0].estado_nuevo || 'Sin estado'}</strong> el {new Date(auditByOrder[order.id][0].fecha).toLocaleString('es-AR')}</span></div>}
+                              {auditByOrder[order.id]?.[0] && <div className="mx-5 mb-5 space-y-2">
+                                <div className="inline-flex max-w-full flex-wrap items-center gap-2 border border-[#eadfca] bg-white px-3 py-2 text-xs text-gray-700">
+                                  <Clock className="h-3.5 w-3.5 shrink-0 text-[#b89420]" />
+                                  <span><strong className="text-[#352820]">{auditByOrder[order.id][0].actor_nombre || auditByOrder[order.id][0].actor_email || 'Admin'}</strong> {getAuditActionLabel(auditByOrder[order.id][0].accion)} de <strong>{ORDER_STATUS_LABELS[auditByOrder[order.id][0].estado_anterior] || auditByOrder[order.id][0].estado_anterior || 'Sin estado'}</strong> a <strong>{ORDER_STATUS_LABELS[auditByOrder[order.id][0].estado_nuevo] || auditByOrder[order.id][0].estado_nuevo || 'Sin estado'}</strong> el {new Date(auditByOrder[order.id][0].fecha).toLocaleString('es-AR')}</span>
+                                  {auditByOrder[order.id].length > 1 && <button type="button" onClick={() => setExpandedAuditOrderId(expandedAuditOrderId === order.id ? null : order.id)} className="ml-auto text-[10px] font-black uppercase tracking-wider text-[#7a5b20] hover:text-[#352820] cursor-pointer">{expandedAuditOrderId === order.id ? 'Ocultar historial' : 'Ver historial (' + auditByOrder[order.id].length + ')'}</button>}
+                                </div>
+                                {expandedAuditOrderId === order.id && <div className="max-w-3xl border border-[#eadfca] bg-white p-3 text-xs text-gray-700 shadow-xs">
+                                  <div className="space-y-2">
+                                    {auditByOrder[order.id].map((entry) => <div key={entry.id} className="border-l-2 border-[#d3ad2f] bg-[#faf8f3] px-3 py-2"><p className="font-black text-[#352820]">{entry.actor_nombre || entry.actor_email || 'Admin'} {getAuditActionLabel(entry.accion)}</p><p className="mt-0.5 font-semibold text-gray-600">{ORDER_STATUS_LABELS[entry.estado_anterior] || entry.estado_anterior || 'Sin estado'} a {ORDER_STATUS_LABELS[entry.estado_nuevo] || entry.estado_nuevo || 'Sin estado'} el {new Date(entry.fecha).toLocaleString('es-AR')}</p>{entry.motivo && <p className="mt-1 font-semibold text-gray-800">Motivo: {entry.motivo}</p>}</div>)}
+                                  </div>
+                                </div>}
+                              </div>}
                             </div></div></td></tr>
                           </React.Fragment>
                         );

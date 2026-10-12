@@ -41,17 +41,17 @@ export const CartProvider = ({ children }) => {
   };
 
   const addToCart = (product, quantity = 1) => {
+    setIsCartDrawerOpen(true);
+    setToast(null);
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === product.id);
       if (existingItem) {
         // Limit to stock if available
         const newQty = Math.min(existingItem.quantity + quantity, product.stock || 99);
-        showToast(`Cantidad actualizada de ${product.name} en el carrito!`);
         return prevCart.map((item) =>
           item.id === product.id ? { ...item, quantity: newQty } : item
         );
       }
-      showToast(`${product.name} agregado al carrito!`);
       return [...prevCart, { ...product, quantity }];
     });
   };
