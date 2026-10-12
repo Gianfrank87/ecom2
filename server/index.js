@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dbAll, dbGet, dbRun, withTransaction } from './db.js';
+import { createRequestLogger, logger } from './logger.js';
 import { MercadoPagoConfig, Preference, Payment, WebhookSignatureValidator } from 'mercadopago';
 import { searchLocalities, calculateShippingQuote } from './services/shippingService.js';
 import { sendWelcomeEmail } from './services/mailer.js';
@@ -121,7 +122,7 @@ const parseStoredImageUrls = (value, legacyImage) => {
   return normalizeImageUrls(stored.length ? stored : undefined, legacyImage);
 };
 const internalError = (res, err) => {
-  if (err) console.error('Error interno del servidor:', err);
+  if (err) logger.error('Error interno del servidor', err);
   return res.status(500).json({ error: 'Error interno del servidor.' });
 };
 const allowedCategories = new Set(['collares', 'correas', 'alimentos', 'juguetes', 'consejos']);
@@ -145,7 +146,7 @@ const removeLocalReceipt = async (fileName) => {
   const safeName = path.basename(fileName);
   if (safeName !== fileName) return;
   try { await fs.promises.unlink(path.join(uploadsDirectory, safeName)); } catch (error) {
-    if (error.code !== 'ENOENT') console.error('No se pudo eliminar el comprobante anterior.');
+    if (error.code !== 'ENOENT') logger.error('No se pudo eliminar el comprobante local anterior', error);
   }
 };
 
@@ -153,7 +154,7 @@ const removeStoredReceipt = async (reference) => {
   if (!reference) return;
   if (isSupabaseReceiptReference(reference)) {
     try { await deleteReceipt(reference); } catch (error) {
-      console.error('No se pudo eliminar el comprobante anterior de Supabase Storage:', error.message);
+      logger.error('No se pudo eliminar el comprobante anterior de Supabase Storage', error);
     }
     return;
   }
@@ -174,6 +175,7 @@ const allowedOrigins = new Set([
 ]);
 
 app.disable('x-powered-by');
+app.use(createRequestLogger());
 
 // Enable CORS and JSON parsing
 app.use(cors({
@@ -513,7 +515,7 @@ const deactivateOffersForProduct = async (productId, productName, query = { all:
         const productIds = JSON.parse(offer.producto_ids || '[]').map(String);
         return productIds.includes(String(productId));
       } catch (e) {
-        console.warn(`Advertencia: producto_ids inválido en oferta ${offer.id}:`, offer.producto_ids);
+        logger.warn('Oferta con producto_ids inválido', { offerId: offer.id, productoIds: offer.producto_ids });
         return false;
       }
     });
@@ -530,7 +532,7 @@ const deactivateOffersForProduct = async (productId, productName, query = { all:
 
     return affectedOffers.length;
   } catch (err) {
-    console.error('Error en deactivateOffersForProduct:', err);
+    logger.error('Error al desactivar ofertas por stock', err);
     throw err;
   }
 };
@@ -665,7 +667,7 @@ app.post('/api/clients/register', authLimiter, async (req, res) => {
 
     // Enviar email de bienvenida en segundo plano sin ralentizar la respuesta HTTP
     sendWelcomeEmail({ email: normalizedEmail, name: normalizedName }).catch(err => {
-      console.error('[MAILER REGISTER] Error background email:', err);
+      logger.error('Error enviando email de bienvenida en segundo plano', err);
     });
 
     res.status(201).json({
@@ -849,14 +851,14 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
             await dbRun(
               'UPDATE ofertas SET activa = FALSE WHERE id = ?',
               [offer.id]
-            ).catch(e => console.warn(`No se pudo desactivar oferta ${offer.id}:`, e.message));
+            ).catch((error) => logger.warn('No se pudo desactivar una oferta vinculada al producto eliminado', { offerId: offer.id, error }));
           }
         } catch (e) {
-          console.warn(`Error procesando oferta ${offer.id}:`, e.message);
+          logger.warn('Error procesando oferta vinculada al producto eliminado', { offerId: offer.id, error: e });
         }
       }
     } catch (offerErr) {
-      console.warn('No se pudieron procesar ofertas:', offerErr.message);
+      logger.warn('No se pudieron procesar ofertas vinculadas al producto eliminado', offerErr);
       // Continuar de todas formas
     }
 
@@ -869,7 +871,7 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
       res.status(404).json({ error: 'No se pudo eliminar el producto' });
     }
   } catch (err) {
-    console.error('Error al eliminar producto:', err.message);
+    logger.error('Error al eliminar producto', err);
     internalError(res, err);
   }
 });
@@ -1622,7 +1624,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
           });
         });
       } catch (releaseError) {
-        console.error('No se pudo liberar la reserva del pedido de Mercado Pago:', releaseError.message);
+        logger.error('No se pudo liberar la reserva del pedido de Mercado Pago', { orderId: mercadoPagoOrderToRelease, error: releaseError });
       }
     }
     if (err.status) {
@@ -1640,14 +1642,17 @@ app.post('/api/orders', requireClient, async (req, res) => {
 // POST /api/webhooks/mercadopago (Public webhook from Mercado Pago)
 app.post('/api/webhooks/mercadopago', async (req, res) => {
   try {
-    const logMpWebhook = (message, details = {}) => console.log(`[MP WEBHOOK] ${message}`, details);
+    const logMpWebhook = (message, details = {}) => logger.info(`Mercado Pago webhook: ${message}`, {
+      requestId: req.requestId,
+      ...details,
+    });
     const secret = process.env.MP_WEBHOOK_SECRET;
     const xSignature = req.headers['x-signature'];
     const xRequestId = req.headers['x-request-id'];
     const dataId = req.query['data.id'] || req.query.id || req.body?.data?.id || req.body?.id;
 
     if (!secret && isProduction) {
-      console.error('MP_WEBHOOK_SECRET es obligatorio en produccion. Webhook rechazado.');
+      logger.error('MP_WEBHOOK_SECRET es obligatorio en produccion. Webhook rechazado.', { requestId: req.requestId });
       return res.status(500).json({ error: 'Webhook no configurado.' });
     }
 
@@ -1660,11 +1665,11 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
           secret
         });
       } catch (validationError) {
-        console.error('Firma de webhook de Mercado Pago invalida:', validationError.message);
+        logger.warn('Firma de webhook de Mercado Pago invalida', { requestId: req.requestId, error: validationError });
         return res.status(401).json({ error: 'Firma de webhook invalida.' });
       }
     } else {
-      console.warn('MP_WEBHOOK_SECRET no esta configurado. Se omite la validacion de firma solo en desarrollo.');
+      logger.warn('MP_WEBHOOK_SECRET no esta configurado. Se omite la validacion de firma solo en desarrollo.', { requestId: req.requestId });
     }
 
     const type = req.query.type || req.query.topic || req.body?.type || req.body?.action;
@@ -1676,7 +1681,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     logMpWebhook('Notificación recibida', { dataId: String(dataId), type });
 
     if (!mpClient) {
-      console.warn('Mercado Pago no esta configurado; no se pudo consultar el pago del webhook.');
+      logger.warn('Mercado Pago no esta configurado; no se pudo consultar el pago del webhook.', { requestId: req.requestId, dataId: String(dataId), type });
       return res.status(200).send('OK');
     }
 
@@ -1686,7 +1691,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 
     const orderId = paymentData.external_reference;
     if (!orderId) {
-      console.warn('Pago de Mercado Pago sin external_reference:', paymentData.id);
+      logger.warn('Pago de Mercado Pago sin external_reference', { requestId: req.requestId, paymentId: paymentData.id });
       return res.status(200).send('OK');
     }
 
@@ -1712,12 +1717,12 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
       );
 
       if (!order) {
-        console.warn('Webhook MP para pedido inexistente:', orderId, 'payment:', paymentId);
+        logger.warn('Webhook MP para pedido inexistente', { requestId: req.requestId, orderId, paymentId });
         return;
       }
 
       if (order.metodo_pago !== 'mercadopago') {
-        console.warn('Webhook MP recibido para pedido no Mercado Pago:', orderId, 'payment:', paymentId);
+        logger.warn('Webhook MP recibido para pedido no Mercado Pago', { requestId: req.requestId, orderId, paymentId, metodoPago: order.metodo_pago });
         return;
       }
       logMpWebhook('Pedido asociado encontrado', {
@@ -1728,7 +1733,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
       });
 
       if (order.mp_payment_id && String(order.mp_payment_id) !== paymentId) {
-        console.warn('Pedido con payment_id previo distinto. No se modifica el pedido:', orderId);
+        logger.warn('Pedido con payment_id previo distinto. No se modifica el pedido.', { requestId: req.requestId, orderId, paymentId, existingPaymentId: order.mp_payment_id });
         return;
       }
 
@@ -1890,7 +1895,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 
     res.status(200).send('OK');
   } catch (err) {
-    console.error('Error procesando webhook de Mercado Pago:', err);
+    logger.error('Error procesando webhook de Mercado Pago', { requestId: req.requestId, error: err });
     res.status(500).json({ error: 'No se pudo procesar la notificación de pago.' });
   }
 });
@@ -2058,6 +2063,21 @@ app.post('/api/shipping/quote', (req, res) => {
   }
 });
 
+app.use((err, req, res, _next) => {
+  const statusCode = err.status || err.statusCode || 500;
+  logger.error('Error no controlado en request HTTP', {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    statusCode,
+    error: err,
+  });
+  if (res.headersSent) return;
+  res.status(statusCode).json({
+    error: statusCode >= 500 ? 'Error interno del servidor.' : err.message || 'Solicitud inválida.',
+  });
+});
+
 
 // ─────────────────────────────────────────
 // START SERVER
@@ -2127,18 +2147,18 @@ const ensureDatabaseSchema = async () => {
         END IF;
       END $$;
     `);
-    console.log('✅ Esquema de base de datos de pedidos sincronizado.');
+    logger.info('Esquema de base de datos sincronizado');
   } catch (err) {
-    console.warn('⚠️ No se pudo sincronizar el esquema de pedidos en startup:', err.message);
+    logger.warn('No se pudo sincronizar el esquema de pedidos en startup', err);
   }
 };
 
 const synchronizeExpiredReservations = async () => {
   try {
     const released = await withTransaction(releaseExpiredMercadoPagoReservations);
-    if (released > 0) console.log(`Se liberaron reservas vencidas de ${released} pedido(s) de Mercado Pago.`);
+    if (released > 0) logger.info('Reservas vencidas de Mercado Pago liberadas', { released });
   } catch (error) {
-    console.error('No se pudieron liberar las reservas vencidas:', error.message);
+    logger.error('No se pudieron liberar las reservas vencidas', error);
   }
 };
 
@@ -2148,5 +2168,14 @@ const reservationCleanupTimer = setInterval(synchronizeExpiredReservations, 60_0
 reservationCleanupTimer.unref();
 
 app.listen(PORT, () => {
-  console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
+  logger.info('Servidor Express iniciado', { port: Number(PORT), environment: process.env.NODE_ENV || 'development' });
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', reason instanceof Error ? reason : { reason });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', error);
+  process.exitCode = 1;
 });

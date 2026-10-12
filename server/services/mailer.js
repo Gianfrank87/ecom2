@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { dbGet } from '../db.js';
+import { logger } from '../logger.js';
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -29,7 +30,7 @@ const getConfiguredStore = async () => {
     }));
     return { ...defaults, ...Object.fromEntries(entries) };
   } catch (error) {
-    console.warn('[MAILER] No se pudo leer la configuración de tienda:', error.message);
+    logger.warn('Mailer: no se pudo leer la configuración de tienda', error);
     return defaults;
   }
 };
@@ -54,11 +55,10 @@ export async function sendWelcomeEmail({ email, name }) {
     const fromAddress = process.env.SMTP_FROM || `NigDiz <onboarding@resend.dev>`;
 
     if (!pass || pass.includes('tu_api_key_aqui')) {
-      console.log('--- [MAILER DEV SIMULATION] ---');
-      console.log(`To: ${email}`);
-      console.log(`Subject: ¡Bienvenido/a a ${storeDisplayName}!`);
-      console.log('Motivo: Clave SMTP_PASS no configurada en .env');
-      console.log('-------------------------------');
+      logger.info('Mailer: envío simulado por falta de SMTP_PASS configurado', {
+        recipientEmail: email,
+        subject: `¡Bienvenido/a a ${storeDisplayName}!`,
+      });
       return;
     }
 
@@ -130,11 +130,15 @@ export async function sendWelcomeEmail({ email, name }) {
       const resData = await resendResponse.json();
 
       if (!resendResponse.ok) {
-        console.error('[MAILER RESEND ERROR]', resendResponse.status, JSON.stringify(resData, null, 2));
+        logger.error('Mailer: Resend rechazó el email', {
+          statusCode: resendResponse.status,
+          response: resData,
+          recipientEmail: email,
+        });
         return;
       }
 
-      console.log(`[MAILER] Correo de bienvenida enviado a: ${email} (ID: ${resData.id})`);
+      logger.info('Mailer: correo de bienvenida enviado por Resend', { recipientEmail: email, messageId: resData.id });
       return;
     }
 
@@ -153,8 +157,8 @@ export async function sendWelcomeEmail({ email, name }) {
       html: htmlContent
     });
 
-    console.log(`[MAILER SMTP] Correo enviado a: ${email} (MessageId: ${info.messageId})`);
+    logger.info('Mailer: correo de bienvenida enviado por SMTP', { recipientEmail: email, messageId: info.messageId });
   } catch (error) {
-    console.error('[MAILER ERROR Detallado]:', error);
+    logger.error('Mailer: error enviando correo de bienvenida', error);
   }
 }
