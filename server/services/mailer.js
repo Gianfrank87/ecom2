@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { dbGet } from '../db.js';
 import { logger } from '../logger.js';
+import { getFrontendUrl } from '../config/frontend.js';
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -53,6 +54,7 @@ export async function sendWelcomeEmail({ email, name }) {
     const contactEmail = escapeHtml(store.contactEmail);
     const instagramUrl = String(store.instagramUrl || '').startsWith('https://') ? store.instagramUrl : '';
     const fromAddress = process.env.SMTP_FROM || `NigDiz <onboarding@resend.dev>`;
+    const storefrontUrl = escapeHtml(getFrontendUrl(process.env.FRONTEND_URL || process.env.CLIENT_URL));
 
     if (!pass || pass.includes('tu_api_key_aqui')) {
       logger.info('Mailer: envío simulado por falta de SMTP_PASS configurado', {
@@ -95,7 +97,7 @@ export async function sendWelcomeEmail({ email, name }) {
             </div>
 
             <div class="button-container">
-              <a href="${process.env.FRONTEND_URL || '#'}" class="btn">Ir a la Tienda</a>
+              <a href="${storefrontUrl}" class="btn">Ir a la Tienda</a>
             </div>
 
             <p style="font-size: 13px; color: #4b382b;">${footerText}</p>

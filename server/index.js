@@ -14,6 +14,7 @@ import { createRequestLogger, logger } from './logger.js';
 import { MercadoPagoConfig, Preference, Payment, WebhookSignatureValidator } from 'mercadopago';
 import { searchLocalities, calculateShippingQuote } from './services/shippingService.js';
 import { sendWelcomeEmail } from './services/mailer.js';
+import { getAllowedOrigins, getFrontendUrl } from './config/frontend.js';
 import {
   deleteReceipt,
   downloadReceipt,
@@ -184,18 +185,7 @@ const removeStoredReceipt = async (reference) => {
   await removeLocalReceipt(reference);
 };
 
-const parseOriginList = (value = '') => String(value)
-  .split(',')
-  .map((origin) => origin.trim().replace(/\/$/, ''))
-  .filter(Boolean);
-
-const allowedOrigins = new Set([
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  ...parseOriginList(process.env.CLIENT_URL),
-  ...parseOriginList(process.env.CORS_ORIGIN),
-  ...parseOriginList(process.env.CORS_ORIGINS),
-]);
+const allowedOrigins = getAllowedOrigins();
 
 app.disable('x-powered-by');
 app.use(createRequestLogger());
@@ -207,7 +197,6 @@ app.use(cors({
     if (origin && allowedOrigins.has(origin.replace(/\/$/, ''))) return callback(null, true);
     return callback(new Error('Origen no permitido por CORS.'));
   },
-  credentials: true,
 }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1676,7 +1665,9 @@ app.post('/api/orders', requireClient, async (req, res) => {
       }
 
       const preference = new Preference(mpClient);
-      const host = process.env.CLIENT_URL || 'http://localhost:5173';
+      // Return to the allowed storefront used for checkout, preserving its JWT/cart.
+      const checkoutOrigin = req.get('origin');
+      const host = allowedOrigins.has(checkoutOrigin) ? checkoutOrigin : getFrontendUrl();
 
       const preferenceItems = trustedOrder.lines.map(line => ({
         id: String(line.productId),

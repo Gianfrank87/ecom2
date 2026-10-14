@@ -1,6 +1,6 @@
 # AGENTS.md - Estado actual del proyecto NigDiz
 
-Ultima actualizacion: 2026-09-27.
+Ultima actualizacion: 2026-10-14.
 
 NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + PostgreSQL. La marca visible y los paquetes internos activos usan NigDiz. Las claves historicas de localStorage se migran automaticamente a `nigdiz_*` y se eliminan en el navegador del usuario.
 
@@ -243,7 +243,8 @@ El panel admin permite:
 - `DATABASE_URL`, `JWT_SECRET`, tokens de Mercado Pago, SMTP/Resend y cualquier secreto deben vivir solo en entorno.
 - `.env`, `.env*`, `.local/` y `server/uploads/comprobantes/` no deben subirse.
 - Los comprobantes nuevos usan un bucket privado de Supabase Storage cuando estan configuradas las variables del servidor. La base guarda una referencia `supabase:` y la descarga sigue pasando por el endpoint autenticado, que valida propietario/admin. En desarrollo sin Storage se usa `server/uploads/comprobantes`; los archivos locales anteriores siguen siendo compatibles durante la transicion.
-- CORS esta allowlisteado para localhost y dominios configurados en `server/index.js`.
+- CORS esta allowlisteado mediante `server/config/frontend.js` para localhost, `https://nigdiz.com.ar`, `https://www.nigdiz.com.ar`, `https://ecomlau-mauve.vercel.app` y dominios configurados con `CLIENT_URL`, `FRONTEND_URL`, `CORS_ORIGIN` o `CORS_ORIGINS`. No usa credenciales/cookies; la sesion usa JWT en Authorization.
+- `VITE_API_URL` es la unica variable de URL del frontend y debe incluir `/api`; produccion usa la API HTTPS de Render como fallback. `CLIENT_URL` configura el retorno por defecto de Mercado Pago y `FRONTEND_URL` el enlace de los emails. Las nuevas preferencias vuelven al Origin permitido de la compra. Ver `README.md` para despliegue y variables.
 - El backend desactiva `x-powered-by` y agrega headers basicos: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
 - Login/registro tienen rate limit.
 - En desarrollo, si `MP_WEBHOOK_SECRET` no existe, el webhook avisa y omite validacion de firma. En produccion (`NODE_ENV=production`) rechaza el webhook si falta el secreto.
