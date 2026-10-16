@@ -39,6 +39,8 @@ const storageRequest = async (objectPath, options = {}, authenticated = false) =
 };
 
 export const isReceiptStorageConfigured = () => {
+  // MariaDB/Towebs uses private files by default. Supabase is optional legacy storage.
+  if (process.env.RECEIPTS_STORAGE !== 'supabase') return false;
   const { url, key, bucket } = getConfig();
   return Boolean(url && key && bucket);
 };

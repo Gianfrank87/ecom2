@@ -1,55 +1,56 @@
-# Probar localmente y volver a producción
+# Entorno local MariaDB
 
-## Arrancar las pruebas
+Los comandos activos usan MariaDB 10.6, aislada en 127.0.0.1:55433/nigdiz_local.
+No usan la base de Towebs ni modifican .env. Los datos antiguos de PostgreSQL
+permanecen en .local/postgres como respaldo, fuera del flujo activo. La base SQLite
+anterior se conserva en .local/legacy/sqlite/database.db; no la usa el backend.
 
-Desde la raíz del proyecto (PowerShell: usar `npm.cmd` si bloquea `npm`):
+## Preparacion en Windows
 
-```sh
+Instalar dependencias con npm install en la raiz y npm install dentro de server/.
+Descomprimir la distribucion ZIP oficial de MariaDB 10.6.28 en:
+
+.local/mariadb-bin/mariadb-10.6.28-winx64/
+
+Alternativamente definir LOCAL_MARIADB_BIN con el directorio bin de MariaDB.
+El script necesita mariadbd.exe y mariadb-install-db.exe. No descarga ni instala
+servicios de Windows. En otros sistemas, inicializar primero .local/mariadb con
+las herramientas oficiales de MariaDB y credenciales del archivo local.
+
+```bash
+npm run local:setup
 npm run dev:local
 ```
 
-Abre la web en **http://localhost:5173**. El comando prepara/inicia PostgreSQL, el backend en el puerto 5000 y Vite en el 5173. Cerrar antes otro servidor que use esos puertos. `Ctrl+C` detiene la web y el backend. La base sigue disponible; `npm run local:stop` la detiene sin borrar datos.
+- Frontend: http://localhost:5173 (proxy /api hacia puerto 5000).
+- Backend: http://localhost:5000.
+- Credenciales locales: .local/ACCESOS-MARIADB.md.
+- Passwords generados: .local/mariadb-settings.json, ignorado por Git.
+- Datos persistentes: .local/mariadb/.
+- Logs del motor: .local/mariadb-process.log y el archivo .err del directorio de datos.
 
-**Cuentas y contraseñas:** consultar [.local/ACCESOS.md](.local/ACCESOS.md). Hay un administrador y un cliente exclusivos de pruebas; también se pueden registrar clientes nuevos desde la web.
+La primera ejecucion prepara el esquema, cinco categorias y un admin/cliente local.
+No crea productos ni pedidos. Las siguientes ejecuciones conservan los registros.
+Mercado Pago y el proveedor de email estan desactivados en este flujo local;
+ninguna compra de desarrollo realiza una llamada de pago real.
 
-- Base: `nigdiz_local`, en `127.0.0.1:55432`.
-- Datos persistentes: `.local/postgres/`.
-- Secretos y credenciales de prueba: `.local/settings.json`.
-- Productos iniciales: copia de `server/database.db` (SQLite), abierta en modo solo lectura. No se copian clientes ni pedidos de esa base.
-- Se importa una sola vez. Reiniciar no repone stock ni borra compras o cambios.
-- `npm run local:setup` prepara la base sin iniciar la web.
-- `npm run dev:server:local` inicia solo el backend local.
-- Requisitos: Node 24+, PostgreSQL instalado y dependencias (`npm ci` y `npm ci --prefix server`). En Windows se detecta `C:/Program Files/PostgreSQL/<versión>/bin`; puede especificarse `LOCAL_PG_BIN`.
+npm run dev:server:local levanta solo la API. npm run local:stop detiene el motor
+sin borrar datos, despues de verificar que @@datadir pertenece a este proyecto.
+Detener primero el proceso dev para cerrar API/Vite.
 
-La instancia de PostgreSQL que ya estaba instalada en Windows no se modifica: se usan sus ejecutables con otro directorio y puerto. `.local/` está ignorada por Git. No borrar esa carpeta si se quieren conservar las pruebas.
+## Pruebas de integracion
 
-## Qué se puede probar
-
-Registro, login, catálogo, edición de productos y stock, carrito, pedidos, comprobantes, mensajes y administración. Para compras locales usar transferencia/efectivo; los datos bancarios son ficticios y **no hay que transferir dinero**. Imágenes externas siguen necesitando Internet.
-
-### Mercado Pago en modo prueba
-
-`dev:local` usa siempre la base local, pero puede cargar credenciales de Mercado Pago desde `.env` o `server/.env` si existen. Para probar Checkout Pro sin dinero real, configurar una credencial de prueba:
-
-```env
-MP_ACCESS_TOKEN=APP_USR_...
-MP_WEBHOOK_SECRET=...
-MP_NOTIFICATION_URL=https://tu-url-publica/api/webhooks/mercadopago
+```bash
+npm run local:setup
+npm run test:mariadb
 ```
 
-`MP_WEBHOOK_SECRET` es opcional en desarrollo; si falta, el backend avisa en consola y omite la validación de firma. `MP_NOTIFICATION_URL` también es opcional: sirve para probar webhooks locales mediante una URL pública de túnel. El modo prueba lo determina Mercado Pago por la credencial usada. Para una prueba completa, iniciar sesión en Mercado Pago con una cuenta compradora de prueba y usar las tarjetas de prueba oficiales. El nombre del titular controla el resultado: `APRO` aprueba, `OTHE` rechaza y `CONT` deja pendiente.
+Las pruebas requieren el motor local activo en 55433. Verifican @@datadir y crean
+una base nigdiz_test_<pid>_<aleatorio> exclusiva, que eliminan al finalizar.
+No aceptan DB_* ni DATABASE_URL del entorno como destino. Levantan otra API en
+un puerto libre, con configuracion de produccion, credenciales ficticias y un
+mock de Mercado Pago exclusivo del proceso de pruebas. No usan el frontend.
 
-En un teléfono conectado al mismo Wi-Fi, abrir `http://IP-DE-LA-PC:5173` con la web en marcha (Windows debe permitir el puerto 5173). Las peticiones `/api` pasan por Vite al backend de esta PC; el teléfono no necesita conectarse directamente a PostgreSQL.
-
-## Volver a la conexión de producción antes de publicar
-
-**No hay que cambiar una URL en el código ni revertir estos archivos.** `dev:local` inyecta la conexión local únicamente en los procesos que arranca; no escribe `.env`, no cambia el hosting y no modifica la base remota.
-
-1. Detener `dev:local` con `Ctrl+C` y, si se desea, ejecutar `npm run local:stop`.
-2. Compilar normalmente con `npm run build`. No ejecutar el comando de desarrollo local en producción.
-3. Mantener en el hosting las variables existentes: `VITE_API_URL` del frontend apuntando al backend remoto; `DATABASE_URL`, `JWT_SECRET` y las variables de pago del backend según su configuración de producción.
-4. Revisar `git status`: `.local/`, `.env*` y comprobantes privados no deben subirse. Publicar solo cuando el usuario lo autorice.
-
-Al preparar este entorno no había archivos `.env` con los valores remotos en este checkout. Esos valores no se inventaron ni se reemplazaron: siguen siendo responsabilidad de la configuración existente del hosting. Para ejecutar **desde esta PC** contra la base remota, primero recuperar esos valores del hosting en archivos ignorados por Git; eso es distinto de probar con la base local.
-
-Si se pide “volver a producción antes de subir”, seguir esta sección, conservar la configuración del hosting y verificar el build. No migrar la base local hacia producción ni ejecutar scripts de datos sin confirmar explícitamente el destino.
+Para validar la configuracion real del backend sin modificar datos, usar
+npm run db:check con DB_* definidos en el .env privado de la raiz. Para Towebs,
+seguir TOWEBS.md. No publicar .local, .env ni comprobantes privados.

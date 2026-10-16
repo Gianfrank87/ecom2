@@ -259,7 +259,7 @@ const getPaymentConfig = async (query = { all: dbAll }) => {
 
 const restoreOrderStock = async (orderId, transaction) => {
   const items = await transaction.all(
-    'SELECT producto_id, SUM(cantidad)::INTEGER AS cantidad FROM pedido_items WHERE pedido_id = ? GROUP BY producto_id ORDER BY producto_id',
+    'SELECT producto_id, SUM(cantidad) AS cantidad FROM pedido_items WHERE pedido_id = ? GROUP BY producto_id ORDER BY producto_id',
     [orderId]
   );
   for (const item of items) {
@@ -274,8 +274,8 @@ const restoreOrderStock = async (orderId, transaction) => {
     try { productIds = JSON.parse(offer.producto_ids || '[]').map(String); } catch { continue; }
     if (!productIds.length) continue;
     const availableProducts = await transaction.all(
-      'SELECT id FROM productos WHERE id = ANY(?::bigint[]) AND activo = TRUE AND stock > 0',
-      [productIds]
+      `SELECT id FROM productos WHERE id IN (${productIds.map(() => '?').join(',')}) AND activo = TRUE AND stock > 0`,
+      productIds
     );
     if (availableProducts.length === productIds.length) {
       await transaction.run(
@@ -288,30 +288,48 @@ const restoreOrderStock = async (orderId, transaction) => {
 
 const releaseExpiredMercadoPagoReservations = async (transaction) => {
   const expired = await transaction.all(
-    `UPDATE pedidos
-     SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL,
-         estado = 'pago_vencido',
-         pago_rechazo_motivo = 'El plazo de 30 minutos para completar el pago venció. Podés iniciar una nueva compra.'
+    `SELECT id FROM pedidos
      WHERE metodo_pago = 'mercadopago' AND estado = 'pendiente_pago'
        AND stock_reservado_mp = TRUE AND reserva_stock_expira_at <= CURRENT_TIMESTAMP
-     RETURNING id`
+     ORDER BY id FOR UPDATE`
   );
-  for (const order of expired) await restoreOrderStock(order.id, transaction);
+  for (const order of expired) {
+    await transaction.run(
+      `UPDATE pedidos SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL,
+         estado = 'pago_vencido',
+         pago_rechazo_motivo = 'El plazo de 30 minutos para completar el pago venció. Podés iniciar una nueva compra.'
+       WHERE id = ?`,
+      [order.id]
+    );
+    await restoreOrderStock(order.id, transaction);
+  }
   return expired.length;
 };
 
 const releaseMercadoPagoReservation = async (orderId, transaction, { status = 'pago_rechazado', reason = null } = {}) => {
-  const released = await transaction.get(
+  const reserved = await transaction.get(
+    `SELECT id FROM pedidos
+     WHERE id = ? AND metodo_pago = 'mercadopago' AND stock_reservado_mp = TRUE FOR UPDATE`,
+    [orderId]
+  );
+  if (!reserved) return false;
+  await transaction.run(
     `UPDATE pedidos SET stock_reservado_mp = FALSE, reserva_stock_expira_at = NULL,
-       estado = ?, pago_rechazo_motivo = ?
-     WHERE id = ? AND metodo_pago = 'mercadopago' AND stock_reservado_mp = TRUE
-     RETURNING id`,
+       estado = ?, pago_rechazo_motivo = ? WHERE id = ?`,
     [status, reason, orderId]
   );
-  if (!released) return false;
   await restoreOrderStock(orderId, transaction);
   return true;
 };
+
+const updateOrderStatus = (orderId, status, reason) => withTransaction(async transaction => {
+  if (reason === undefined) {
+    await transaction.run('UPDATE pedidos SET estado = ? WHERE id = ?', [status, orderId]);
+  } else {
+    await transaction.run('UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ?', [status, reason, orderId]);
+  }
+  return transaction.get('SELECT estado, pago_rechazo_motivo FROM pedidos WHERE id = ?', [orderId]);
+});
 
 const normalizePaymentConfig = (input = {}) => {
   const config = {};
@@ -488,7 +506,7 @@ const createOrderAuditEntry = async ({
   await query.run(
     `INSERT INTO pedido_auditoria
       (pedido_id, actor_id, actor_nombre, actor_email, accion, estado_anterior, estado_nuevo, motivo, detalles)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       orderId,
       actor?.id || null,
@@ -554,7 +572,7 @@ const mapOffer = async (o) => {
   }
 
   const salesResult = await dbGet(
-    'SELECT SUM(cantidad) as total FROM (SELECT DISTINCT pedido_id, cantidad FROM pedido_items WHERE oferta_id = ?)',
+    'SELECT SUM(cantidad) as total FROM (SELECT DISTINCT pedido_id, cantidad FROM pedido_items WHERE oferta_id = ?) AS ventas_oferta',
     [o.id]
   );
 
@@ -729,7 +747,7 @@ app.post('/api/clients/register', authLimiter, async (req, res) => {
     const hash = await bcrypt.hash(password, salt);
 
     const result = await dbRun(
-      'INSERT INTO clientes (nombre, email, password_hash) VALUES (?, ?, ?) RETURNING id',
+      'INSERT INTO clientes (nombre, email, password_hash) VALUES (?, ?, ?)',
       [normalizedName, normalizedEmail, hash]
     );
     const newClientId = result.rows?.[0]?.id ?? result.lastID;
@@ -841,7 +859,7 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     const nextOrden = (maxOrdenRow?.maxOrden || 0) + 1;
     const result = await dbRun(
       `INSERT INTO productos (nombre, descripcion, precio, stock, categoria, imagen_url, imagenes, destacado, activo, orden)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?) RETURNING id`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
       [String(name).trim(), description, numericPrice, numericStock, normalizedCategory, imageUrls[0], JSON.stringify(imageUrls), Boolean(featured), nextOrden]
     );
     const newProductId = result.rows?.[0]?.id ?? result.lastID;
@@ -959,16 +977,18 @@ app.patch('/api/products/:id/stock', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'El delta de stock debe ser un entero distinto de cero' });
     }
 
-    const product = await dbGet('SELECT id, nombre, stock FROM productos WHERE id = ?', [req.params.id]);
-    if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
-
-    const newStock = Math.max(0, Number(product.stock) + delta);
-    await dbRun('UPDATE productos SET stock = ? WHERE id = ?', [newStock, product.id]);
-    const deactivatedOffers = newStock === 0
-      ? await deactivateOffersForProduct(product.id, product.nombre)
-      : 0;
-
-    res.json({ stock: newStock, deactivatedOffers });
+    const result = await withTransaction(async transaction => {
+      const product = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ? FOR UPDATE', [req.params.id]);
+      if (!product) return null;
+      const newStock = Math.max(0, Number(product.stock) + delta);
+      await transaction.run('UPDATE productos SET stock = ? WHERE id = ?', [newStock, product.id]);
+      const deactivatedOffers = newStock === 0
+        ? await deactivateOffersForProduct(product.id, product.nombre, transaction)
+        : 0;
+      return { stock: newStock, deactivatedOffers };
+    });
+    if (!result) return res.status(404).json({ error: 'Producto no encontrado' });
+    res.json(result);
   } catch (err) {
     internalError(res);
   }
@@ -1012,7 +1032,7 @@ app.put('/api/admin/config/banco', requireAdmin, async (req, res) => {
       for (const [key, value] of [['banco_alias', alias], ['banco_cbu', cbu], ['banco_titular', titular]]) {
         await transaction.run(
           `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
-           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+           ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
           [key, value]
         );
       }
@@ -1065,7 +1085,7 @@ app.put('/api/admin/config/payment-methods', requireAdmin, async (req, res) => {
       for (const [field, key] of Object.entries(PAYMENT_CONFIG_KEYS)) {
         await transaction.run(
           `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
-           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+           ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
           [key, String(config[field])],
         );
       }
@@ -1094,7 +1114,7 @@ app.put('/api/admin/config/store', requireAdmin, async (req, res) => {
       for (const [field, rules] of Object.entries(STORE_CONFIG_FIELDS)) {
         await transaction.run(
           `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
-           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+           ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
           [rules.key, config[field]]
         );
       }
@@ -1126,8 +1146,7 @@ app.put('/api/admin/content/:key', requireAdmin, async (req, res) => {
     const content = normalizeContentBlock(block, req.body || {});
     await dbRun(
       `INSERT INTO configuraciones (clave, valor) VALUES (?, ?)
-       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
-       RETURNING 1 AS id`,
+       ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
       [block.configKey, JSON.stringify(content)]
     );
     res.json(content);
@@ -1172,7 +1191,7 @@ app.post('/api/offers', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Se requiere nombre y al menos 2 productos.' });
     }
     const result = await dbRun(
-      `INSERT INTO ofertas (nombre, producto_ids, descuento_o_precio_paquete, tipo_descuento, prioridad, activa) VALUES (?,?,?,?,?,?) RETURNING id`,
+      `INSERT INTO ofertas (nombre, producto_ids, descuento_o_precio_paquete, tipo_descuento, prioridad, activa) VALUES (?,?,?,?,?,?)`,
       [nombre, JSON.stringify(producto_ids), Number(descuento_o_precio_paquete) || 0, tipo_descuento || 'precio_paquete', Number(prioridad) || 0, Boolean(activa)]
     );
     const newOfferId = result.rows?.[0]?.id ?? result.lastID;
@@ -1272,7 +1291,10 @@ app.get('/api/orders/:id/audit', requireAdmin, async (req, res) => {
        ORDER BY fecha DESC, id DESC`,
       [req.params.id]
     );
-    res.json(audit);
+    res.json(audit.map(row => ({
+      ...row,
+      detalles: typeof row.detalles === 'string' ? JSON.parse(row.detalles) : row.detalles,
+    })));
   } catch (err) {
     internalError(res, err);
   }
@@ -1298,15 +1320,9 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
 
     let updatedOrder;
     if (estado === 'pago_rechazado') {
-      updatedOrder = await dbGet(
-        'UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ? RETURNING estado, pago_rechazo_motivo',
-        [estado, rejectionReason, req.params.id]
-      );
+      updatedOrder = await updateOrderStatus(req.params.id, estado, rejectionReason);
     } else {
-      updatedOrder = await dbGet(
-        'UPDATE pedidos SET estado = ? WHERE id = ? RETURNING estado, pago_rechazo_motivo',
-        [estado, req.params.id]
-      );
+      updatedOrder = await updateOrderStatus(req.params.id, estado);
     }
     if (check.estado !== updatedOrder?.estado) {
       await createOrderAuditEntry({
@@ -1380,7 +1396,7 @@ app.post('/api/orders/:id/messages', requireClient, async (req, res) => {
     }
     const hiloId = latest ? (latest.cerrado ? latest.hilo_id + 1 : latest.hilo_id) : 1;
     const result = await dbRun(
-      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, FALSE, ?, ?, FALSE) RETURNING id',
+      'INSERT INTO mensajes (pedido_id, remitente, contenido, leido, hilo_id, tipo, cerrado) VALUES (?, ?, ?, FALSE, ?, ?, FALSE)',
       [req.params.id, remitente, contenido, hiloId, 'mensaje']
     );
     const messageId = result.rows?.[0]?.id ?? result.lastID;
@@ -1400,7 +1416,7 @@ app.patch('/api/orders/:id/messages/close', requireAdmin, async (req, res) => {
     if (!latest || latest.cerrado) return res.status(400).json({ error: 'El reclamo ya está cerrado o no tiene mensajes.' });
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, FALSE, ?, 'sistema', TRUE) RETURNING id`,
+       VALUES (?, 'admin', 'El administrador dio por cerrado este reclamo', CURRENT_TIMESTAMP, FALSE, ?, 'sistema', TRUE)`,
       [req.params.id, latest.hilo_id]
     );
     const messageId = result.rows?.[0]?.id ?? result.lastID;
@@ -1424,7 +1440,7 @@ app.patch('/api/orders/:id/messages/reopen', requireClient, async (req, res) => 
     const nextThreadId = latest.hilo_id + 1;
     const result = await dbRun(
       `INSERT INTO mensajes (pedido_id, remitente, contenido, fecha, leido, hilo_id, tipo, cerrado)
-       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, TRUE, ?, 'sistema', FALSE) RETURNING id`,
+       VALUES (?, 'cliente', ?, CURRENT_TIMESTAMP, TRUE, ?, 'sistema', FALSE)`,
       [req.params.id, `${req.user.name} reabrió el reclamo`, nextThreadId]
     );
     const messageId = result.rows?.[0]?.id ?? result.lastID;
@@ -1586,11 +1602,13 @@ app.post('/api/orders', requireClient, async (req, res) => {
           const result = await transaction.run(
             `UPDATE productos
              SET stock = stock - ?
-             WHERE id = ? AND activo = TRUE AND stock >= ?
-             RETURNING id, nombre, stock`,
+             WHERE id = ? AND activo = TRUE AND stock >= ?`,
             [requested.quantity, productId, requested.quantity]
           );
-          const product = result.rows?.[0];
+          // UPDATE holds the product lock until COMMIT; this reads our own write.
+          const product = result.changes > 0
+            ? await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId])
+            : null;
           if (!product) {
             const current = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [productId]);
             if (!current) {
@@ -1617,7 +1635,7 @@ app.post('/api/orders', requireClient, async (req, res) => {
           entrega_nombre, entrega_email, entrega_telefono, entrega_direccion, entrega_notas,
           envio_destination_id, envio_localidad, envio_provincia, envio_cp, envio_costo,
           stock_reservado_mp, reserva_stock_expira_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = TRUE THEN CURRENT_TIMESTAMP + (? * INTERVAL '1 minute') ELSE NULL END) RETURNING id`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = TRUE THEN DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? MINUTE) ELSE NULL END)`,
         [
           req.user.id,
           chargedTotal,
@@ -1825,7 +1843,8 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     const paymentStatusDetail = paymentData.status_detail ? String(paymentData.status_detail) : null;
     const merchantOrderId = paymentData.merchant_order_id || paymentData.order?.id || null;
     const preferenceId = paymentData.preference_id || null;
-    const approvedAt = paymentData.date_approved || null;
+    // Bind a Date so MariaDB receives UTC, rather than an ISO string with an offset.
+    const approvedAt = paymentData.date_approved ? new Date(paymentData.date_approved) : null;
     logMpWebhook('Pago consultado correctamente', {
       dataId: String(dataId),
       paymentId,
@@ -1974,11 +1993,11 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
           lockedProducts.push({ product, quantity: requested.quantity });
         }
         for (const { product, quantity } of lockedProducts) {
-          const result = await transaction.run(
-            'UPDATE productos SET stock = stock - ? WHERE id = ? RETURNING id, nombre, stock',
+          await transaction.run(
+            'UPDATE productos SET stock = stock - ? WHERE id = ?',
             [quantity, product.id]
           );
-          const updatedProduct = result.rows?.[0];
+          const updatedProduct = await transaction.get('SELECT id, nombre, stock FROM productos WHERE id = ?', [product.id]);
           if (updatedProduct && Number(updatedProduct.stock) === 0) {
             await deactivateOffersForProduct(updatedProduct.id, updatedProduct.nombre, transaction);
           }
@@ -2066,7 +2085,7 @@ app.post('/api/orders/:id/comprobante', requireClient, runReceiptUpload, async (
         contentType: req.file.mimetype,
       });
     } else {
-      if (isProduction) {
+      if (process.env.RECEIPTS_STORAGE === 'supabase') {
         return res.status(503).json({ error: 'El almacenamiento de comprobantes no está configurado.' });
       }
       await fs.promises.writeFile(path.join(uploadsDirectory, generatedName), req.file.buffer, { flag: 'wx' });
@@ -2142,10 +2161,7 @@ app.patch('/api/admin/orders/:id/approval', requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'El pedido no tiene un comprobante de transferencia.' });
     }
     const estado = decision === 'approved' ? 'pendiente' : 'pago_rechazado';
-    const updatedOrder = await dbGet(
-      'UPDATE pedidos SET estado = ?, pago_rechazo_motivo = ? WHERE id = ? RETURNING estado, pago_rechazo_motivo',
-      [estado, decision === 'rejected' ? rejectionReason : null, req.params.id]
-    );
+    const updatedOrder = await updateOrderStatus(req.params.id, estado, decision === 'rejected' ? rejectionReason : null);
     await createOrderAuditEntry({
       orderId: req.params.id,
       actor: req.user,
@@ -2217,90 +2233,15 @@ app.use((err, req, res, _next) => {
 // START SERVER
 // ─────────────────────────────────────────
 const ensureDatabaseSchema = async () => {
-  try {
-    await dbRun('ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagenes TEXT');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_nombre VARCHAR(120)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_email VARCHAR(255)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_telefono VARCHAR(40)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_direccion VARCHAR(240)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_notas TEXT');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_destination_id INTEGER');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_localidad VARCHAR(120)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_provincia VARCHAR(120)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_cp VARCHAR(20)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS envio_costo NUMERIC(12,2) NOT NULL DEFAULT 0');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_payment_id VARCHAR(80)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_payment_status VARCHAR(40)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_payment_status_detail VARCHAR(120)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_merchant_order_id VARCHAR(120)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_preference_id VARCHAR(120)');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_approved_at TIMESTAMPTZ');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_last_webhook_at TIMESTAMPTZ');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pago_rechazo_motivo TEXT');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS stock_reservado_mp BOOLEAN NOT NULL DEFAULT FALSE');
-    await dbRun('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reserva_stock_expira_at TIMESTAMPTZ');
-    await dbRun(`
-      CREATE TABLE IF NOT EXISTS pedido_auditoria (
-        id BIGSERIAL PRIMARY KEY,
-        pedido_id BIGINT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
-        actor_id BIGINT,
-        actor_nombre VARCHAR(120),
-        actor_email VARCHAR(255),
-        accion VARCHAR(80) NOT NULL,
-        estado_anterior VARCHAR(40),
-        estado_nuevo VARCHAR(40),
-        motivo TEXT,
-        detalles JSONB,
-        fecha TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await dbRun('CREATE INDEX IF NOT EXISTS pedido_auditoria_pedido_fecha_idx ON pedido_auditoria(pedido_id, fecha DESC)');
-    await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS pedidos_mp_payment_id_unique ON pedidos(mp_payment_id) WHERE mp_payment_id IS NOT NULL');
-    for (const rules of Object.values(STORE_CONFIG_FIELDS)) {
-      await dbRun(
-        'INSERT INTO configuraciones (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO NOTHING',
-        [rules.key, rules.defaultValue]
-      );
-    }
-    await dbRun(`
-      DO $$
-      DECLARE
-        estado_constraint TEXT;
-        estado_type TEXT;
-      BEGIN
-        SELECT t.typname INTO estado_type
-        FROM pg_attribute a
-        JOIN pg_class c ON c.oid = a.attrelid
-        JOIN pg_type t ON t.oid = a.atttypid
-        WHERE c.relname = 'pedidos' AND a.attname = 'estado' AND t.typtype = 'e';
-        
-        IF estado_type IS NOT NULL THEN
-          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''esperando_aprobacion''', estado_type);
-          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_rechazado''', estado_type);
-          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pendiente_pago''', estado_type);
-          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''aprobado''', estado_type);
-          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_vencido''', estado_type);
-          EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''pago_aprobado_sin_stock''', estado_type);
-        ELSE
-          FOR estado_constraint IN
-            SELECT conname
-            FROM pg_constraint
-            WHERE conrelid = 'pedidos'::regclass
-              AND contype = 'c'
-              AND pg_get_constraintdef(oid) ILIKE '%estado%'
-          LOOP
-            EXECUTE format('ALTER TABLE pedidos DROP CONSTRAINT %I', estado_constraint);
-          END LOOP;
-          ALTER TABLE pedidos
-            ADD CONSTRAINT pedidos_estado_check
-            CHECK (estado IN ('pendiente', 'esperando_aprobacion', 'pago_rechazado', 'pago_vencido', 'pago_aprobado_sin_stock', 'enviado', 'completado', 'pendiente_pago', 'aprobado'));
-        END IF;
-      END $$;
-    `);
-    logger.info('Esquema de base de datos sincronizado');
-  } catch (err) {
-    logger.warn('No se pudo sincronizar el esquema de pedidos en startup', err);
+  const { validateDatabaseSchema } = await import('./schema.js');
+  await validateDatabaseSchema();
+  for (const rules of Object.values(STORE_CONFIG_FIELDS)) {
+    await dbRun(
+      'INSERT INTO configuraciones (clave, valor) VALUES (?, ?) ON DUPLICATE KEY UPDATE clave = VALUES(clave)',
+      [rules.key, rules.defaultValue]
+    );
   }
+  logger.info('Conexion MariaDB y esquema verificados');
 };
 
 const synchronizeExpiredReservations = async () => {

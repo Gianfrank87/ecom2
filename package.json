@@ -4,24 +4,24 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "local:setup": "node scripts/local-environment.mjs setup",
-    "local:stop": "node scripts/local-environment.mjs stop",
-    "dev:local": "node scripts/local-environment.mjs dev",
-    "dev:server:local": "node scripts/local-environment.mjs server",
+    "local:setup": "node scripts/mariadb-local-environment.mjs setup",
+    "local:stop": "node scripts/mariadb-local-environment.mjs stop",
+    "dev:local": "node scripts/mariadb-local-environment.mjs dev",
+    "dev:server:local": "node scripts/mariadb-local-environment.mjs server",
     "dev": "cd client && vite",
     "build": "cd client && vite build",
+    "package:towebs": "node scripts/package-towebs.mjs",
     "lint": "oxlint client/src",
     "preview": "cd client && vite preview",
-    "dev:server": "node --env-file=.env server/index.js"
+    "dev:server": "node --env-file=.env server/index.js",
+    "db:check": "node --env-file=.env server/check-db.js",
+    "test:mariadb": "node --test server/tests/mariadb.integration.test.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "dotenv": "^17.4.2",
-    "express-rate-limit": "^8.7.0",
     "lucide-react": "^1.31.0",
-    "pg": "^8.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2"

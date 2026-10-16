@@ -1,8 +1,8 @@
 # AGENTS.md - Estado actual del proyecto NigDiz
 
-Ultima actualizacion: 2026-10-14.
+Ultima actualizacion: 2026-10-15.
 
-NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + PostgreSQL. La marca visible y los paquetes internos activos usan NigDiz. Las claves historicas de localStorage se migran automaticamente a `nigdiz_*` y se eliminan en el navegador del usuario.
+NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + MariaDB 10.6. La marca visible y los paquetes internos activos usan NigDiz. Las claves historicas de localStorage se migran automaticamente a `nigdiz_*` y se eliminan en el navegador del usuario.
 
 Este archivo resume el estado real del repo y debe mantenerse como guia operativa para futuras sesiones de trabajo.
 
@@ -17,7 +17,7 @@ Este archivo resume el estado real del repo y debe mantenerse como guia operativ
 - Backend:
   - Node.js con ES Modules.
   - Express 5.
-  - PostgreSQL mediante `pg` y `DATABASE_URL`.
+  - MariaDB 10.6 mediante `mysql2`; variables DB_HOST, DB_PORT, DB_USER, DB_PASSWORD y DB_NAME (o DATABASE_URL mysql://).
   - JWT con `jsonwebtoken`.
   - Password hashing con `bcryptjs`.
   - Rate limiting con `express-rate-limit`.
@@ -27,31 +27,34 @@ Este archivo resume el estado real del repo y debe mantenerse como guia operativ
 - Desarrollo local:
   - Frontend: `http://localhost:5173`.
   - Backend: `http://localhost:5000`.
-  - PostgreSQL local aislado: `127.0.0.1:55432/nigdiz_local`.
+  - MariaDB local aislada: `127.0.0.1:55433/nigdiz_local`. Towebs: localhost:3306/seholaco_ecommerce.
 
 ## Comandos
 
 Desde la raiz del proyecto:
 
-- `npm run dev:local`: flujo recomendado para pruebas completas. Prepara/inicia PostgreSQL local aislado, backend y Vite.
+- `npm run dev:local`: flujo recomendado para pruebas completas. Prepara/inicia MariaDB local aislada, backend y Vite.
 - `npm run local:setup`: prepara la base local sin levantar la web.
 - `npm run dev:server:local`: levanta solo el backend contra la base local.
-- `npm run local:stop`: detiene PostgreSQL local y conserva datos.
+- `npm run local:stop`: detiene MariaDB local y conserva datos.
 - `npm run dev`: levanta solo Vite desde `client`.
 - `npm run dev:server`: levanta `server/index.js` usando `.env` de la raiz.
 - `npm run build`: compila el frontend.
+- `npm run package:towebs`: compila y genera frontend.zip y backend.zip en .local/entregas, con rutas ZIP compatibles con Linux. Empaquetador Windows/PowerShell; no incluye secretos, datos ni pruebas.
 - `npm run lint`: ejecuta `oxlint client/src`.
 
-Detalles del entorno local estan en `ENTORNO-LOCAL.md`. Las credenciales de prueba generadas viven en `.local/ACCESOS.md`; esa carpeta no se sube a Git.
+Detalles del entorno local estan en `ENTORNO-LOCAL.md`. Las credenciales de prueba generadas viven en `.local/ACCESOS-MARIADB.md`; esa carpeta no se sube a Git.
 
 ## Estructura principal
 
 - `client/`: aplicacion React.
 - `server/`: API Express, migraciones y servicios.
-- `server/local/schema.sql`: esquema usado por el entorno local aislado.
-- `scripts/local-environment.mjs`: orquestador de PostgreSQL local, backend y Vite.
+- `server/passenger.cjs`: archivo de inicio para Towebs/Passenger; puente CommonJS con import() hacia index.js. En el panel usar passenger.cjs si el contenido de server esta en nigdiz-api; require() directo de index.js falla por top-level await.
+- `Base de datos/nigdiz_mysql.sql`: referencia del esquema MariaDB para crear bases vacias y preparar pruebas locales; no se necesita en el hosting ni se lee al arrancar.
+- `scripts/mariadb-local-environment.mjs`: orquestador de MariaDB local, backend y Vite.
+- `scripts/package-towebs.mjs`: unico empaquetador de entregas Towebs; rutas internas de ZIP con / para evitar archivos llamados assets\\index en Linux.
 - `.local/`: datos y secretos locales ignorados por Git.
-- `dist/`: build generado.
+- `client/dist/`: build generado del frontend, con .htaccess para rutas React en Apache. El contenido se sube al directorio publico de nigdiz.com.ar.
 
 ## Base de datos
 
@@ -68,12 +71,7 @@ Tablas principales:
 
 `configuraciones` guarda datos bancarios (`banco_alias`, `banco_cbu`, `banco_titular`), datos generales de tienda (`tienda_nombre`, `tienda_whatsapp`, `tienda_email_contacto`, `tienda_instagram_url`, `tienda_direccion`, `tienda_horarios`, `tienda_footer_texto`) y bloques de contenido editables como `content_home_hero`.
 
-`server/index.js` ejecuta una sincronizacion chica al arrancar: agrega `productos.imagenes` si falta y ajusta los estados permitidos de `pedidos`. Las migraciones historicas siguen existiendo y se ejecutan manualmente cuando corresponda:
-
-- `server/migrate-payment-method.js`
-- `server/migrate-bank-config.js`
-- `server/migrate-offers-columns.js`
-- `server/migrate-categories.js`
+`server/index.js` verifica conexion, tablas y motor InnoDB directamente en MariaDB al arrancar mediante `server/schema.js`, sin leer archivos SQL ni aplicar DDL. Solo completa configuraciones generales faltantes. `npm run db:check` valida conexion/tablas sin escribir datos. `server/bootstrap-mariadb.js` agrega las cinco categorias usadas por la app, con dry-run por defecto y confirmacion explicita `--apply --database=...`. Ver `TOWEBS.md` para subida manual desde el panel. Los futuros cambios de estructura deben aplicarse mediante migraciones explicitas, no sincronizando un SQL con produccion. Las migraciones y herramientas antiguas de PostgreSQL fueron retiradas; los datos locales anteriores se conservan en .local sin formar parte del entorno activo.
 
 No ejecutar migraciones ni scripts de datos contra produccion sin confirmar el destino. No hay scripts destructivos de limpieza o migracion SQLite en el flujo activo. Si se necesita una migracion de datos nueva, crearla con nombre explicito, dry-run y confirmacion del destino.
 
@@ -240,11 +238,11 @@ El panel admin permite:
 ## Seguridad y datos sensibles
 
 - `JWT_SECRET` es obligatorio y debe tener al menos 32 caracteres.
-- `DATABASE_URL`, `JWT_SECRET`, tokens de Mercado Pago, SMTP/Resend y cualquier secreto deben vivir solo en entorno.
+- `DB_PASSWORD`, `DATABASE_URL`, `JWT_SECRET`, tokens de Mercado Pago, SMTP/Resend y cualquier secreto deben vivir solo en entorno.
 - `.env`, `.env*`, `.local/` y `server/uploads/comprobantes/` no deben subirse.
-- Los comprobantes nuevos usan un bucket privado de Supabase Storage cuando estan configuradas las variables del servidor. La base guarda una referencia `supabase:` y la descarga sigue pasando por el endpoint autenticado, que valida propietario/admin. En desarrollo sin Storage se usa `server/uploads/comprobantes`; los archivos locales anteriores siguen siendo compatibles durante la transicion.
-- CORS esta allowlisteado mediante `server/config/frontend.js` para localhost, `https://nigdiz.com.ar`, `https://www.nigdiz.com.ar`, `https://ecomlau-mauve.vercel.app` y dominios configurados con `CLIENT_URL`, `FRONTEND_URL`, `CORS_ORIGIN` o `CORS_ORIGINS`. No usa credenciales/cookies; la sesion usa JWT en Authorization.
-- `VITE_API_URL` es la unica variable de URL del frontend y debe incluir `/api`; produccion usa la API HTTPS de Render como fallback. `CLIENT_URL` configura el retorno por defecto de Mercado Pago y `FRONTEND_URL` el enlace de los emails. Las nuevas preferencias vuelven al Origin permitido de la compra. Ver `README.md` para despliegue y variables.
+- Los comprobantes nuevos usan archivos privados persistentes en `server/uploads/comprobantes` por defecto (`RECEIPTS_STORAGE=local`), tambien en produccion. No exponer esta carpeta por HTTP estatico; incluirla en backups de Towebs. La descarga valida propietario/admin. Supabase queda como compatibilidad opcional explicita (`RECEIPTS_STORAGE=supabase`) y lector de referencias anteriores.
+- CORS esta allowlisteado mediante `server/config/frontend.js` para localhost, `https://nigdiz.com.ar`, `https://www.nigdiz.com.ar` y dominios configurados con `CLIENT_URL`, `FRONTEND_URL`, `CORS_ORIGIN` o `CORS_ORIGINS`. No usa credenciales/cookies; la sesion usa JWT en Authorization.
+- `VITE_API_URL` es la unica variable de URL del frontend y debe incluir `/api`; produccion usa `//api.nigdiz.com.ar/api` como fallback, siguiendo el protocolo HTTP/HTTPS de la tienda. El backend Towebs esta verificado por HTTP; HTTPS/Cloudflare esta pendiente. Para probar la tienda HTTP, agregar sus origenes en CORS_ORIGINS del panel Node. `CLIENT_URL` configura el retorno por defecto de Mercado Pago y `FRONTEND_URL` el enlace de los emails. Las nuevas preferencias vuelven al Origin permitido de la compra. Ver `TOWEBS.md` para despliegue y variables.
 - El backend desactiva `x-powered-by` y agrega headers basicos: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
 - Login/registro tienen rate limit.
 - En desarrollo, si `MP_WEBHOOK_SECRET` no existe, el webhook avisa y omite validacion de firma. En produccion (`NODE_ENV=production`) rechaza el webhook si falta el secreto.
@@ -259,25 +257,26 @@ Al registrarse un cliente, `sendWelcomeEmail` corre en segundo plano:
 
 El template de bienvenida debe mantenerse con branding NigDiz y paleta de la marca.
 
+## Estado de Towebs (2026-10-15)
+
+Frontend y backend publicados por el panel de Towebs. La tienda carga por HTTP y la API devuelve 200 en productos/categorias desde MariaDB. Se usa passenger.cjs para arrancar y schema.js no lee SQL. Pruebas locales: `npm run test:mariadb` (13 escenarios), build y lint. HTTPS sigue pendiente de confirmacion del usuario sobre Cloudflare o certificado de Towebs. No se han verificado pagos reales ni email real en el nuevo hosting. La limpieza local conserva el funcionamiento actual; no modifica automaticamente los archivos remotos.
+
 ## Checklist de mejoras
 
 ### 1. Comprobantes privados persistentes
 
-- [x] Integrar el backend con un bucket privado de Supabase Storage.
+- [x] Guardar comprobantes privados en archivos persistentes de Towebs mediante RECEIPTS_STORAGE=local.
 - [x] Mantener validacion de propietario/admin antes de descargar.
 - [x] Validar MIME, firma binaria y limite de 5 MB antes de almacenar.
-- [x] Reemplazar el comprobante anterior sin dejar objetos nuevos huerfanos si falla la base de datos.
-- [x] Mantener lectura compatible de comprobantes locales anteriores durante la transicion.
-- [x] Crear en Supabase el bucket privado `comprobantes`, con limite de 5 MB y MIME JPEG, PNG y PDF.
-- [x] Configurar en Render `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (o `SUPABASE_SECRET_KEY`) y `SUPABASE_RECEIPTS_BUCKET=comprobantes`.
-- [x] Desplegar el backend con la integracion y verificar que la API nueva responde en produccion.
-- [x] Verificar una carga real en produccion y confirmar al dia siguiente que el comprobante persiste en Supabase y sigue disponible en el panel admin para revision.
+- [x] Reemplazar el comprobante anterior y limpiar el archivo nuevo si falla la base de datos.
+- [x] Conservar compatibilidad opcional con referencias anteriores de Supabase Storage.
+- [x] Verificar carga, descarga y permisos en MariaDB local con NODE_ENV=production.
+- [ ] Verificar persistencia y backup de comprobantes en el nuevo hosting despues de una actualizacion/reinicio.
 
 ### 2. Configuracion general
 
 - [x] Conectar los datos generales de tienda al Footer.
 - [x] Conectar `GET /api/config/store` a ContactSection y unificar los valores iniciales de WhatsApp, email, Instagram y direccion con los datos correctos de la seccion Contacto. El nombre del remitente del email ya usa NigDiz como valor predeterminado.
-- [ ] Incorporar los datos editables de tienda en el contenido de los emails.
 - [x] Hacer editables los medios de pago visibles y las instrucciones de transferencia/efectivo; el checkout y Footer reflejan los medios activos y el backend impide crear pedidos con un método deshabilitado.
 - [ ] Hacer editables los textos de estados de pago.
 
@@ -288,9 +287,9 @@ El template de bienvenida debe mantenerse con branding NigDiz y paleta de la mar
 ### 4. Mercado Pago en produccion
 
 - [x] Reservar stock al iniciar un checkout de Mercado Pago por 30 minutos y liberarlo ante vencimiento, rechazo o cancelacion.
-- [ ] Probar en local la reserva concurrente, la liberacion por vencimiento y el caso de pago aprobado despues de vencer.
+- [x] Probar en MariaDB 10.6.28 local la reserva concurrente, liberacion por vencimiento, rechazo repetido y pago aprobado despues de vencer con/sin stock. Mercado Pago simulado; API y MariaDB reales.
 - [ ] Configurar el webhook real en el dashboard de Mercado Pago apuntando a `/api/webhooks/mercadopago`.
-- [ ] Confirmar `MP_WEBHOOK_SECRET` en Render y ejecutar una compra real controlada.
+- [ ] Confirmar `MP_WEBHOOK_SECRET` en Towebs y ejecutar una compra real controlada cuando HTTPS este listo.
 - [ ] Verificar cambio de estado, metadata e impacto de stock despues del pago.
 
 ### 5. Emails

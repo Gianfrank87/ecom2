@@ -1,9 +1,10 @@
 import { readStoredValue } from '../config/storageKeys';
 
 // VITE_API_URL includes /api and is embedded by Vite at build time.
+// Towebs follows the storefront protocol: HTTP now, HTTPS after SSL is ready.
 const API_URL = (import.meta.env.VITE_API_URL?.trim() || (import.meta.env.DEV
   ? 'http://localhost:5000/api'
-  : 'https://ecommercelaura.onrender.com/api')).replace(/\/+$/, '');
+  : '//api.nigdiz.com.ar/api')).replace(/\/+$/, '');
 
 // All protected requests use the single authenticated session token.
 const getSessionToken = () => readStoredValue('clientToken');

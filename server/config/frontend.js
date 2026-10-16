@@ -1,7 +1,6 @@
 const storefrontOrigins = [
   'https://nigdiz.com.ar',
   'https://www.nigdiz.com.ar',
-  'https://ecomlau-mauve.vercel.app',
 ];
 
 export const parseOriginList = (value = '') => String(value)
