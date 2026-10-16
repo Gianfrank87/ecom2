@@ -3,6 +3,10 @@ DirectoryIndex index.html
 # React Router: keep existing files/directories and serve the app for routes.
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  # Leave /api and /api/... to the Node app mounted by Towebs/Passenger.
+  # This exclusion does not create the Passenger mount itself.
+  RewriteRule ^api(?:/|$) - [L]
+
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [L]

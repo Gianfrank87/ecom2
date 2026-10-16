@@ -1,6 +1,6 @@
 # AGENTS.md - Estado actual del proyecto NigDiz
 
-Ultima actualizacion: 2026-10-15.
+Ultima actualizacion: 2026-10-16.
 
 NigDiz es una tienda online para mascotas. El frontend esta hecho con React + Vite y el backend con Node.js + Express + MariaDB 10.6. La marca visible y los paquetes internos activos usan NigDiz. Las claves historicas de localStorage se migran automaticamente a `nigdiz_*` y se eliminan en el navegador del usuario.
 
@@ -242,7 +242,7 @@ El panel admin permite:
 - `.env`, `.env*`, `.local/` y `server/uploads/comprobantes/` no deben subirse.
 - Los comprobantes nuevos usan archivos privados persistentes en `server/uploads/comprobantes` por defecto (`RECEIPTS_STORAGE=local`), tambien en produccion. No exponer esta carpeta por HTTP estatico; incluirla en backups de Towebs. La descarga valida propietario/admin. Supabase queda como compatibilidad opcional explicita (`RECEIPTS_STORAGE=supabase`) y lector de referencias anteriores.
 - CORS esta allowlisteado mediante `server/config/frontend.js` para localhost, `https://nigdiz.com.ar`, `https://www.nigdiz.com.ar` y dominios configurados con `CLIENT_URL`, `FRONTEND_URL`, `CORS_ORIGIN` o `CORS_ORIGINS`. No usa credenciales/cookies; la sesion usa JWT en Authorization.
-- `VITE_API_URL` es la unica variable de URL del frontend y debe incluir `/api`; produccion usa `//api.nigdiz.com.ar/api` como fallback, siguiendo el protocolo HTTP/HTTPS de la tienda. El backend Towebs esta verificado por HTTP; HTTPS/Cloudflare esta pendiente. Para probar la tienda HTTP, agregar sus origenes en CORS_ORIGINS del panel Node. `CLIENT_URL` configura el retorno por defecto de Mercado Pago y `FRONTEND_URL` el enlace de los emails. Las nuevas preferencias vuelven al Origin permitido de la compra. Ver `TOWEBS.md` para despliegue y variables.
+- `VITE_API_URL` es el override opcional de URL del frontend y debe incluir `/api`; el fallback es `/api` en produccion y desarrollo. Vite lo proxifica a `http://127.0.0.1:5000` sin reescritura. El destino de produccion es `https://nigdiz.com.ar/api`, con Passenger montado en `/api` y carpeta privada `nigdiz-api`. Las rutas Express ya incluyen `/api`: no duplicarlo. `CLIENT_URL` configura el retorno por defecto de Mercado Pago y `FRONTEND_URL` el enlace de los emails. Las nuevas preferencias vuelven al Origin permitido de la compra. Ver `TOWEBS.md` para despliegue y variables.
 - El backend desactiva `x-powered-by` y agrega headers basicos: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
 - Login/registro tienen rate limit.
 - En desarrollo, si `MP_WEBHOOK_SECRET` no existe, el webhook avisa y omite validacion de firma. En produccion (`NODE_ENV=production`) rechaza el webhook si falta el secreto.
@@ -257,9 +257,9 @@ Al registrarse un cliente, `sendWelcomeEmail` corre en segundo plano:
 
 El template de bienvenida debe mantenerse con branding NigDiz y paleta de la marca.
 
-## Estado de Towebs (2026-10-15)
+## Estado de Towebs (2026-10-16)
 
-Frontend y backend publicados por el panel de Towebs. La tienda carga por HTTP y la API devuelve 200 en productos/categorias desde MariaDB. Se usa passenger.cjs para arrancar y schema.js no lee SQL. Pruebas locales: `npm run test:mariadb` (13 escenarios), build y lint. HTTPS sigue pendiente de confirmacion del usuario sobre Cloudflare o certificado de Towebs. No se han verificado pagos reales ni email real en el nuevo hosting. La limpieza local conserva el funcionamiento actual; no modifica automaticamente los archivos remotos.
+Frontend y backend publicados previamente por el panel de Towebs, con API verificada por HTTP. El usuario confirma SSL valido en el dominio principal. El codigo local esta preparado para migrar la API a `https://nigdiz.com.ar/api`; falta cambiar el montaje Passenger en el panel, subir el frontend nuevo y verificar HTTPS/API y webhook en produccion. Se conserva `nigdiz-api` como carpeta privada y `passenger.cjs` como startup. El `.htaccess` excluye `/api` del fallback React, pero no configura Passenger. No se han verificado pagos reales ni email real en el hosting. Ver `TOWEBS.md` para el procedimiento y la transicion de preferencias de Mercado Pago existentes. No se modifican automaticamente archivos remotos.
 
 ## Checklist de mejoras
 

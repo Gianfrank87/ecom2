@@ -52,17 +52,19 @@ entregas incluyen solo archivos necesarios, sin secretos ni datos privados.
 ## Frontend y servicios externos
 
 VITE_API_URL es la unica variable de API del frontend, incluye /api y se incorpora
-al compilar. El valor predeterminado de produccion es //api.nigdiz.com.ar/api:
-usa HTTP si la tienda esta en HTTP y HTTPS si la tienda esta en HTTPS. Desarrollo
-usa localhost. client/public/.htaccess permite abrir rutas React directamente en
-Apache; el build lo copia junto al index.html. Ver TOWEBS.md para subir el build.
+al compilar. El valor predeterminado es /api: produccion consulta
+https://nigdiz.com.ar/api y Vite proxifica /api a http://127.0.0.1:5000 en desarrollo.
+client/public/.htaccess excluye /api del fallback y permite abrir rutas React
+directamente en Apache; el build lo copia junto al index.html. El panel debe
+montar Passenger en /api conservando la carpeta privada nigdiz-api.
+Ver TOWEBS.md para el procedimiento completo y las verificaciones.
 
 La sesion usa JWT en Authorization: Bearer, sin cookies. CLIENT_URL define el
 retorno de Mercado Pago si no hay un Origin permitido, FRONTEND_URL el enlace de
 los emails y CORS_ORIGINS agrega origenes permitidos separados por comas.
 
 MP_NOTIFICATION_URL y el dashboard de Mercado Pago deben apuntar al webhook
-HTTPS real del backend en Towebs. Mantener MP_WEBHOOK_SECRET en produccion.
+https://nigdiz.com.ar/api/webhooks/mercadopago. Mantener MP_WEBHOOK_SECRET en produccion.
 El proveedor de email sigue usando SMTP/Resend; sin SMTP_PASS se simula el envio.
 
 Los secretos, datos locales y comprobantes privados quedan fuera de Git.
